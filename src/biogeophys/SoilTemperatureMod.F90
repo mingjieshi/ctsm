@@ -896,7 +896,7 @@ contains
          qflx_h2osfc_to_ice(c) = 0._r8
          eflx_h2osfc_to_snow_col(c) = 0._r8
       end do
-
+!!!!! print*,8888
       ! Freezing identification
       do fc = 1,num_nolakec
          c = filter_nolakec(fc)
