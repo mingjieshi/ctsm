@@ -24,8 +24,8 @@ module  PhotosynthesisMod
   use CIsoAtmTimeseriesMod, only : C14BombSpike, use_c14_bombspike, C13TimeSeries, use_c13_timeseries, nsectors_c14
   use atm2lndType         , only : atm2lnd_type
   use CanopyStateType     , only : canopystate_type
-  use WaterDiagnosticBulkType      , only : waterdiagnosticbulk_type
-  use WaterFluxBulkType       , only : waterfluxbulk_type
+  use WaterStateType      , only : waterstate_type
+  use WaterfluxType       , only : waterflux_type
   use SoilStateType       , only : soilstate_type
   use TemperatureType     , only : temperature_type
   use SolarAbsorbedType   , only : solarabs_type
@@ -34,6 +34,9 @@ module  PhotosynthesisMod
   use LandunitType        , only : lun
   use PatchType           , only : patch
   use GridcellType        , only : grc
+! MS added---------------------------------------------
+!  use CNVegStateType      , only : cnveg_state_type
+! MS ends ---------------------------------------------
   !
   implicit none
   private
@@ -55,6 +58,8 @@ module  PhotosynthesisMod
   private :: ft             ! photosynthesis temperature response
   private :: fth            ! photosynthesis temperature inhibition
   private :: fth25          ! scaling factor for photosynthesis temperature inhibition
+  private :: fluorescence   ! fluorescence yield function !!! Added By MS
+
   ! For plant hydraulics approach
   private :: hybrid_PHS     ! hybrid solver for ci
   private :: ci_func_PHS    ! ci function
@@ -107,8 +112,7 @@ module  PhotosynthesisMod
      real(r8), pointer, private :: tpu_z_phs_patch   (:,:,:) ! patch triose phosphate utilization rate (umol CO2/m**2/s)
      real(r8), pointer, private :: gs_mol_sun_patch  (:,:) ! patch sunlit leaf stomatal conductance (umol H2O/m**2/s)
      real(r8), pointer, private :: gs_mol_sha_patch  (:,:) ! patch shaded leaf stomatal conductance (umol H2O/m**2/s)
-     real(r8), pointer, private :: gs_mol_sun_ln_patch (:,:) ! patch sunlit leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon (umol H2O/m**2/s)
-     real(r8), pointer, private :: gs_mol_sha_ln_patch (:,:) ! patch shaded leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon (umol H2O/m**2/s)
+
      real(r8), pointer, private :: ac_patch          (:,:) ! patch Rubisco-limited gross photosynthesis (umol CO2/m**2/s)
      real(r8), pointer, private :: aj_patch          (:,:) ! patch RuBP-limited gross photosynthesis (umol CO2/m**2/s)
      real(r8), pointer, private :: ap_patch          (:,:) ! patch product-limited (C3) or CO2-limited (C4) gross photosynthesis (umol CO2/m**2/s)
@@ -183,6 +187,30 @@ module  PhotosynthesisMod
      real(r8), pointer, public  :: enzs_z_patch      (:,:) ! enzyme decay status 1.0-fully active; 0-all decayed during stress
      real(r8), pointer, public  :: fpsn24_patch      (:)   ! 24 hour mean patch photosynthesis (umol CO2/m**2 ground/day)
 
+     ! SIF specific variables-----------MS Added-----------------------------------------------------------------------------
+     real(r8) , pointer, public :: sifsun_patch      (:)   ! canopy layer: solar-induced fluorescence (W/m**2) [always +]
+     real(r8) , pointer, public :: sifsha_patch      (:)   ! canopy layer: solar-induced fluorescence (W/m**2) [always +]
+     real(r8) , pointer, public :: anetsun_patch     (:)   ! foliage net assimilation (umol co2 /m**2/ s)      [always +]
+     real(r8) , pointer, public :: anetsha_patch     (:)   ! foliage net assimilation (umol co2 /m**2/ s)      [always +]
+     real(r8) , pointer, public :: fyieldsun_patch   (:)   ! fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+     real(r8) , pointer, public :: fyieldsha_patch   (:)   ! fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+     real(r8) , pointer, public :: pyieldsun_patch   (:)   ! photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+     real(r8) , pointer, public :: pyieldsha_patch   (:)   ! photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+     real(r8) , pointer, public :: xsatsun_patch     (:)   ! sun-lid light saturation used in fluorescence model (ja/qabs)
+     real(r8) , pointer, public :: xsatsha_patch     (:)   ! shaded light saturation used in fluorescence model (ja/qabs)
+!    real(r8) , pointer, private:: sif_z_sun_patch   (:,:) ! sun-lid canopy layer: solar-induced fluorescence (W/m**2) [always +]
+!    real(r8) , pointer, private:: sif_z_sha_patch   (:,:) ! shaded canopy layer: solar-induced fluorescence (W/m**2) [always +]
+!    real(r8) , pointer, private:: an_z_sun_patch    (:,:) ! sun-lid canopy layer: foliage net assimilation (umol co2 /m**2/ s)  [always +]
+!    real(r8) , pointer, private:: an_z_sha_patch    (:,:) ! shaded canopy layer: foliage net assimilation (umol co2 /m**2/ s)
+     real(r8) , pointer, public :: fsif_patch        (:)   ! solar-induced fluorescence per unit ground area (W/m**2)
+     real(r8) , pointer, public :: fan_patch         (:)   ! net assimilation (umol CO2 /m**2 /s)
+     real(r8) , pointer, public :: fyield_patch      (:)   ! fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+     real(r8) , pointer, public :: pyield_patch      (:)   ! photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+     real(r8) , pointer, public :: fxsat_patch       (:)   ! light saturation used in fluorescence model (ja/qabs)
+     real(r8) , pointer, public :: parsun_patch      (:)   ! APAR, sun-lit (W /m**2)
+     real(r8) , pointer, public :: parsha_patch      (:)   ! APAR, shaded  (W /m**2)
+     real(r8) , pointer, public :: apar_patch        (:)   ! APAR, canopy integrated (W /m**2)
+
      ! Logical switches for different options
      logical, public  :: rootstem_acc                      ! Respiratory acclimation for roots and stems
      logical, private :: light_inhibit                     ! If light should inhibit respiration
@@ -251,8 +279,6 @@ contains
     allocate(this%kp_z_phs_patch    (begp:endp,2,1:nlevcan)) ; this%kp_z_phs_patch    (:,:,:) = nan
     allocate(this%gs_mol_sun_patch  (begp:endp,1:nlevcan))   ; this%gs_mol_sun_patch  (:,:)   = nan
     allocate(this%gs_mol_sha_patch  (begp:endp,1:nlevcan))   ; this%gs_mol_sha_patch  (:,:)   = nan
-    allocate(this%gs_mol_sun_ln_patch (begp:endp,1:nlevcan)) ; this%gs_mol_sun_ln_patch (:,:)   = nan
-    allocate(this%gs_mol_sha_ln_patch (begp:endp,1:nlevcan)) ; this%gs_mol_sha_ln_patch (:,:)   = nan
     allocate(this%ac_patch          (begp:endp,1:nlevcan)) ; this%ac_patch          (:,:) = nan
     allocate(this%aj_patch          (begp:endp,1:nlevcan)) ; this%aj_patch          (:,:) = nan
     allocate(this%ap_patch          (begp:endp,1:nlevcan)) ; this%ap_patch          (:,:) = nan
@@ -328,7 +354,32 @@ contains
       allocate(this%fpsn24_patch    (begp:endp))           ; this%fpsn24_patch      (:)   = nan
       allocate(this%enzs_z_patch    (begp:endp,1:nlevcan)) ; this%enzs_z_patch      (:,:) = 1._r8
     endif
+! MS Added 
+    allocate(this%sifsun_patch     (begp:endp))                   ; this%sifsun_patch(:)    = nan
+    allocate(this%sifsha_patch     (begp:endp))                   ; this%sifsha_patch(:)    = nan
+    allocate(this%anetsun_patch    (begp:endp))                   ; this%anetsun_patch(:)   = nan
+    allocate(this%anetsha_patch    (begp:endp))                   ; this%anetsha_patch(:)   = nan
+    allocate(this%fyieldsun_patch  (begp:endp))                   ; this%fyieldsun_patch(:) = nan
+    allocate(this%fyieldsha_patch  (begp:endp))                   ; this%fyieldsha_patch(:) = nan
+    allocate(this%pyieldsun_patch  (begp:endp))                   ; this%pyieldsun_patch(:) = nan
+    allocate(this%pyieldsha_patch  (begp:endp))                   ; this%pyieldsha_patch(:) = nan
+    allocate(this%xsatsun_patch    (begp:endp))                   ; this%xsatsun_patch(:)   = nan
+    allocate(this%xsatsha_patch    (begp:endp))                   ; this%xsatsha_patch(:)   = nan
+!   allocate(this%sif_z_sun_patch  (begp:endp,1:nlevcan))         ; this%sif_z_sun_patch(:,:)= nan
+!   allocate(this%sif_z_sha_patch  (begp:endp,1:nlevcan))         ; this%sif_z_sha_patch(:,:)= nan
+!   allocate(this%an_z_sun_patch   (begp:endp,1:nlevcan))         ; this%an_z_sun_patch(:,:) = nan
+!   allocate(this%an_z_sha_patch   (begp:endp,1:nlevcan))         ; this%an_z_sha_patch(:,:) = nan
 
+    allocate(this%fsif_patch       (begp:endp))                   ; this%fsif_patch(:)      = nan
+    allocate(this%fan_patch        (begp:endp))                   ; this%fan_patch(:)       = nan
+    allocate(this%fyield_patch     (begp:endp))                   ; this%fyield_patch(:)    = nan
+    allocate(this%pyield_patch     (begp:endp))                   ; this%pyield_patch(:)    = nan
+    allocate(this%fxsat_patch      (begp:endp))                   ; this%fxsat_patch(:)     = nan
+
+    allocate(this%parsun_patch     (begp:endp))                   ; this%parsun_patch(:)    = nan
+    allocate(this%parsha_patch     (begp:endp))                   ; this%parsha_patch(:)    = nan
+    allocate(this%apar_patch	   (begp:endp))			  ; this%apar_patch(:)      = nan
+! MS ends
   end subroutine InitAllocate
 
   !-----------------------------------------------------------------------
@@ -387,6 +438,38 @@ contains
             avgflag='I', long_name='Product-limited photosynthesis', &
             ptr_patch=this%fpsn_wp_patch, set_lake=0._r8, set_urb=0._r8, &
             default='inactive')
+
+      ! MS added
+       this%fsif_patch = spval
+       call hist_addfld1d (fname='FSIF' , units='W/m**2', &
+           avgflag='A', long_name='solar-induced fluorescence', &
+           ptr_patch=this%fsif_patch)
+
+       this%fan_patch = spval
+       call hist_addfld1d (fname='FANET', units='umol CO2 /m**2 /s', &
+           avgflag='A', long_name='net CO2 assimilation', &
+           ptr_patch=this%fan_patch)
+
+       this%fyield_patch = spval
+       call hist_addfld1d (fname='FYIELD', units='unitless', &
+           avgflag='A', long_name='fluorescence yield, canopy weighted diagnostic (photon absorbed photon emitted-1 of PAR)', &
+           ptr_patch=this%fyield_patch)
+
+       this%pyield_patch = spval
+       call hist_addfld1d (fname='PYIELD', units='unitless', &
+           avgflag='A', long_name='photochemical yield canopy weighted diagnostic (photon absorbed photon emitted-1 of PAR)', &
+           ptr_patch=this%pyield_patch)
+
+       this%fxsat_patch = spval
+       call hist_addfld1d (fname='FXSAT', units='unitless', &
+           avgflag='A', long_name='degree of light saturation for fluorescence model, canopy weighted diagnostic', &
+           ptr_patch=this%fxsat_patch)
+
+       this%apar_patch = spval
+       call hist_addfld1d (fname='APAR', units='W/m**2', &
+           avgflag='A', long_name='Absorbed PAR', &
+           ptr_patch=this%apar_patch)
+     ! MS ends
     end if
 
     if (use_cn) then
@@ -405,41 +488,41 @@ contains
        this%c13_psnsun_patch(begp:endp) = spval
        call hist_addfld1d (fname='C13_PSNSUN', units='umolCO2/m^2/s', &
             avgflag='A', long_name='C13 sunlit leaf photosynthesis', &
-            ptr_patch=this%c13_psnsun_patch, default='inactive')
+            ptr_patch=this%c13_psnsun_patch)
 
        this%c13_psnsha_patch(begp:endp) = spval
        call hist_addfld1d (fname='C13_PSNSHA', units='umolCO2/m^2/s', &
             avgflag='A', long_name='C13 shaded leaf photosynthesis', &
-            ptr_patch=this%c13_psnsha_patch, default='inactive')
+            ptr_patch=this%c13_psnsha_patch)
     end if
 
     if ( use_c14 ) then
        this%c14_psnsun_patch(begp:endp) = spval
        call hist_addfld1d (fname='C14_PSNSUN', units='umolCO2/m^2/s', &
             avgflag='A', long_name='C14 sunlit leaf photosynthesis', &
-            ptr_patch=this%c14_psnsun_patch, default='inactive')
+            ptr_patch=this%c14_psnsun_patch)
 
        this%c14_psnsha_patch(begp:endp) = spval
        call hist_addfld1d (fname='C14_PSNSHA', units='umolCO2/m^2/s', &
             avgflag='A', long_name='C14 shaded leaf photosynthesis', &
-            ptr_patch=this%c14_psnsha_patch, default='inactive')
+            ptr_patch=this%c14_psnsha_patch)
     end if
 
     if ( use_c13 ) then
        this%rc13_canair_patch(begp:endp) = spval
        call hist_addfld1d (fname='RC13_CANAIR', units='proportion', &
             avgflag='A', long_name='C13/C(12+13) for canopy air', &
-            ptr_patch=this%rc13_canair_patch, default='inactive')
+            ptr_patch=this%rc13_canair_patch)
 
        this%rc13_psnsun_patch(begp:endp) = spval
        call hist_addfld1d (fname='RC13_PSNSUN', units='proportion', &
             avgflag='A', long_name='C13/C(12+13) for sunlit photosynthesis', &
-            ptr_patch=this%rc13_psnsun_patch, default='inactive')
+            ptr_patch=this%rc13_psnsun_patch)
 
        this%rc13_psnsha_patch(begp:endp) = spval
        call hist_addfld1d (fname='RC13_PSNSHA', units='proportion', &
             avgflag='A', long_name='C13/C(12+13) for shaded photosynthesis', &
-            ptr_patch=this%rc13_psnsha_patch, default='inactive')
+            ptr_patch=this%rc13_psnsha_patch)
     endif
 
     ! Canopy physiology
@@ -488,28 +571,7 @@ contains
           ptr_patch=ptr_1d)
 
     endif
-    this%gs_mol_sun_ln_patch(begp:endp,:) = spval
-    this%gs_mol_sha_ln_patch(begp:endp,:) = spval
-    if (nlevcan>1) then
-       call hist_addfld2d (fname='GSSUNLN', units='umol H20/m2/s', type2d='nlevcan', &
-          avgflag='A', long_name='sunlit leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon', &
-          ptr_patch=this%gs_mol_sun_ln_patch, set_lake=spval, set_urb=spval)
 
-       call hist_addfld2d (fname='GSSHALN', units='umol H20/m2/s', type2d='nlevcan', &
-          avgflag='A', long_name='shaded leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon', &
-          ptr_patch=this%gs_mol_sha_ln_patch, set_lake=spval, set_urb=spval)
-    else
-       ptr_1d => this%gs_mol_sun_ln_patch(begp:endp,1)
-       call hist_addfld1d (fname='GSSUNLN', units='umol H20/m2/s', &
-          avgflag='A', long_name='sunlit leaf stomatal conductance at local noon', &
-          ptr_patch=ptr_1d)
-
-       ptr_1d => this%gs_mol_sha_ln_patch(begp:endp,1)
-       call hist_addfld1d (fname='GSSHALN', units='umol H20/m2/s', &
-          avgflag='A', long_name='shaded leaf stomatal conductance at local noon', &
-          ptr_patch=ptr_1d)
-
-    endif
     if(use_luna)then  
        if(nlevcan>1)then
          call hist_addfld2d (fname='Vcmx25Z', units='umol/m2/s', type2d='nlevcan', &
@@ -794,18 +856,6 @@ contains
          dim1name='pft', dim2name='levcan', switchdim=.true., &
          long_name='shaded leaf stomatal conductance', units='umol H20/m2/s', &
          interpinic_flag='interp', readvar=readvar, data=this%gs_mol_sha_patch)
-
-    call restartvar(ncid=ncid, flag=flag, varname='GSSUNLN', xtype=ncd_double,  &
-         dim1name='pft', dim2name='levcan', switchdim=.true., &
-         long_name='sunlit leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon', &
-         units='umol H20/m2/s', &
-         interpinic_flag='interp', readvar=readvar, data=this%gs_mol_sun_ln_patch)
-
-    call restartvar(ncid=ncid, flag=flag, varname='GSSHALN', xtype=ncd_double,  &
-         dim1name='pft', dim2name='levcan', switchdim=.true., &
-         long_name='shaded leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon', &
-         units='umol H20/m2/s', &
-         interpinic_flag='interp', readvar=readvar, data=this%gs_mol_sha_ln_patch)
     
     call restartvar(ncid=ncid, flag=flag, varname='lnca', xtype=ncd_double,  &
        dim1name='pft', long_name='leaf N concentration', units='gN leaf/m^2', &
@@ -882,7 +932,30 @@ contains
           this%fpsn_wc_patch(p)   = 0._r8
           this%fpsn_wj_patch(p)   = 0._r8
           this%fpsn_wp_patch(p)   = 0._r8
+! MS added ---------------------------------------------------------
+          this%fsif_patch(p)      = 0._r8
+          this%fan_patch(p)       = 0._r8
+          this%fyield_patch(p)    = 0._r8
+          this%pyield_patch(p)    = 0._r8
+          this%fxsat_patch(p)     = 0._r8
+          this%apar_patch(p)	  = 0._r8
 
+          this%sifsun_patch(p)    = 0._r8
+          this%anetsun_patch(p)   = 0._r8
+          this%fyieldsun_patch(p) = 0._r8
+          this%pyieldsun_patch(p) = 0._r8
+          this%xsatsun_patch(p)   = 0._r8
+
+          this%sifsha_patch(p)    = 0._r8
+          this%anetsha_patch(p)   = 0._r8
+          this%fyieldsha_patch(p) = 0._r8
+          this%pyieldsha_patch(p) = 0._r8
+          this%xsatsha_patch(p)   = 0._r8
+
+          this%parsun_patch(p)    = 0._r8
+          this%parsha_patch(p)    = 0._r8
+          this%apar_patch(p)      = 0._r8
+! MS ends -----------------------------------------------------------
           if ( use_c13 ) then
              this%alphapsnsun_patch(p) = 0._r8
              this%alphapsnsha_patch(p) = 0._r8
@@ -945,9 +1018,9 @@ contains
   !------------------------------------------------------------------------------
   subroutine Photosynthesis ( bounds, fn, filterp, &
        esat_tv, eair, oair, cair, rb, btran, &
-       dayl_factor, leafn, &
+       dayl_factor, leafn, downreg, &
        atm2lnd_inst, temperature_inst, surfalb_inst, solarabs_inst, &
-       canopystate_inst, ozone_inst, photosyns_inst, phase)
+       canopystate_inst, ozone_inst, photosyns_inst, phase) ! MS added downreg 
     !
     ! !DESCRIPTION:
     ! Leaf photosynthesis and stomatal conductance calculation as described by
@@ -955,9 +1028,7 @@ contains
     ! a multi-layer canopy
     !
     ! !USES:
-    use clm_varcon        , only : rgas, tfrz, spval
-    use GridcellType      , only : grc
-    use clm_time_manager  , only : get_step_size, is_near_local_noon
+    use clm_varcon     , only : rgas, tfrz
     use clm_varctl     , only : cnallocate_carbon_only
     use clm_varctl     , only : lnc_opt, reduce_dayl_factor, vcmax_opt    
     use pftconMod      , only : nbrdlf_dcd_tmp_shrub, npcropmin
@@ -975,6 +1046,7 @@ contains
     real(r8)               , intent(in)    :: btran( bounds%begp: )          ! transpiration wetness factor (0 to 1) [pft]
     real(r8)               , intent(in)    :: dayl_factor( bounds%begp: )    ! scalar (0-1) for daylength
     real(r8)               , intent(in)    :: leafn( bounds%begp: )          ! leaf N (gN/m2)
+    real(r8)               , intent(in)    :: downreg( bounds%begp: )        ! fractional reduction in GPP due to N limitation (dimensionless)  ! MS Added
     type(atm2lnd_type)     , intent(in)    :: atm2lnd_inst
     type(temperature_type) , intent(in)    :: temperature_inst
     type(surfalb_type)     , intent(in)    :: surfalb_inst
@@ -983,7 +1055,9 @@ contains
     class(ozone_base_type) , intent(in)    :: ozone_inst
     type(photosyns_type)   , intent(inout) :: photosyns_inst
     character(len=*)       , intent(in)    :: phase                          ! 'sun' or 'sha'
-
+! MS added ------------------------------------------------------------------------
+!    type(cnveg_state_type) , intent(in)    :: cnveg_state_inst
+! MS ends -------------------------------------------------------------------------
     !
     ! !LOCAL VARIABLES:
     !
@@ -1036,7 +1110,7 @@ contains
     real(r8) :: theta_ip          ! empirical curvature parameter for ap photosynthesis co-limitation
 
     ! Other
-    integer  :: f,p,c,iv          ! indices
+    integer  :: f,p,c,iv,g        ! indices    ! MS added g
     real(r8) :: cf                ! s m**2/umol -> s/m
     real(r8) :: rsmax0            ! maximum stomatal resistance [s/m]
     real(r8) :: gb                ! leaf boundary layer conductance (m/s)
@@ -1100,9 +1174,32 @@ contains
     real(r8) :: sum_nscaler              
     real(r8) :: total_lai                
     integer  :: nptreemax                
+! MS Added
+    real(r8) , pointer :: sif       (:)                         ! canopy layer: solar-induced fluorescence (W/m**2) [always +]
+    real(r8) , pointer :: anet      (:)                         ! canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+    real(r8) , pointer :: fs        (:)                         ! fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+    real(r8) , pointer :: ps        (:)                         ! photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+    real(r8) , pointer :: xsat      (:)                         ! saturation used in fluorescence model (ja/qabs)
+ 
+   ! Local variables
+    real(r8) :: ja                                              ! electron transport rate as defined by Lee et al. 2015. (umol electrons/m**2/s)
+    real(r8) :: po0                                             ! dark adapted photochemical yield
+    real(r8) :: co2(bounds%begp:bounds%endp)                    ! partial pressure co2 (Pa)
+    real(r8) :: sif_z(bounds%begp:bounds%endp,nlevcan)          ! canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+    real(r8) :: an_z(bounds%begp:bounds%endp,nlevcan)           ! canopy layer: net assimilation (umol co2 /m**2/s)   [always +]
+    real(r8) :: fs_z(bounds%begp:bounds%endp,nlevcan)           ! canopy layer: fluorescence yield
+    real(r8) :: ps_z(bounds%begp:bounds%endp,nlevcan)           ! canopy layer: photochemical yield
+    real(r8) :: xsat_z(bounds%begp:bounds%endp,nlevcan)         ! canopy layer: light saturation
 
-    real(r8) :: dtime                           ! land model time step (sec)
-    integer  :: g                               ! index
+    real(r8) :: ci_z_downreg(bounds%begp:bounds%endp,nlevcan)   ! downregulated intracellular leaf CO2 (Pa)
+    real(r8) :: sifcan                                          ! canopy sum of sif_z
+    real(r8) :: ancan                                           ! canopy sum of an_z
+    real(r8) :: fyieldcan                                       ! canopy sum of fs_z
+    real(r8) :: pyieldcan                                       ! canopy sum of ps_z
+    real(r8) :: xsatcan                                         ! canopy sum of xsat_z
+    real(r8) :: gpp_downreg                                     ! BMR 7/29/15 edit
+    real(r8) :: julday                                          ! BMR 7/29/15 edit
+! MS ends
     !------------------------------------------------------------------------------
 
     ! Temperature and soil water response functions
@@ -1121,6 +1218,7 @@ contains
     SHR_ASSERT_ALL((ubound(btran)       == (/bounds%endp/)), errMsg(sourcefile, __LINE__))
     SHR_ASSERT_ALL((ubound(dayl_factor) == (/bounds%endp/)), errMsg(sourcefile, __LINE__))
     SHR_ASSERT_ALL((ubound(leafn)       == (/bounds%endp/)), errMsg(sourcefile, __LINE__))
+    SHR_ASSERT_ALL((ubound(downreg)     == (/bounds%endp/)), errMsg(sourcefile, __LINE__))  ! MS Added
 
     associate(                                                 &
          c3psn      => pftcon%c3psn                          , & ! Input:  photosynthetic pathway: 0. = c4, 1. = c3
@@ -1153,8 +1251,6 @@ contains
          an         => photosyns_inst%an_patch               , & ! Output: [real(r8) (:,:) ]  net leaf photosynthesis (umol CO2/m**2/s)
          gb_mol     => photosyns_inst%gb_mol_patch           , & ! Output: [real(r8) (:)   ]  leaf boundary layer conductance (umol H2O/m**2/s)
          gs_mol     => photosyns_inst%gs_mol_patch           , & ! Output: [real(r8) (:,:) ]  leaf stomatal conductance (umol H2O/m**2/s)
-         gs_mol_sun_ln => photosyns_inst%gs_mol_sun_ln_patch , & ! Output: [real(r8) (:,:) ]  sunlit leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon (umol H2O/m**2/s)
-         gs_mol_sha_ln => photosyns_inst%gs_mol_sha_ln_patch , & ! Output: [real(r8) (:,:) ]  shaded leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon (umol H2O/m**2/s)
          vcmax_z    => photosyns_inst%vcmax_z_patch          , & ! Output: [real(r8) (:,:) ]  maximum rate of carboxylation (umol co2/m**2/s)
          cp         => photosyns_inst%cp_patch               , & ! Output: [real(r8) (:)   ]  CO2 compensation point (Pa)
          kc         => photosyns_inst%kc_patch               , & ! Output: [real(r8) (:)   ]  Michaelis-Menten constant for CO2 (Pa)
@@ -1170,7 +1266,10 @@ contains
          light_inhibit=> photosyns_inst%light_inhibit        , & ! Input:  [logical        ]  flag if light should inhibit respiration
          leafresp_method=> photosyns_inst%leafresp_method    , & ! Input:  [integer        ]  method type to use for leaf-maint.-respiration at 25C canopy top
          stomatalcond_mtd=> photosyns_inst%stomatalcond_mtd  , & ! Input:  [integer        ]  method type to use for stomatal conductance.GC.fnlprmsn15_r22845
-         leaf_mr_vcm => canopystate_inst%leaf_mr_vcm           & ! Input:  [real(r8)       ]  scalar constant of leaf respiration with Vcmax
+         leaf_mr_vcm => canopystate_inst%leaf_mr_vcm         , & ! Input:  [real(r8)       ]  scalar constant of leaf respiration with Vcmax
+! MS added variables (bmr)--------
+         forc_pco2   => atm2lnd_inst%forc_pco2_grc             & ! Input:  [real(r8) (:)   ]  partial pressure co2 (Pa)
+! MS ends------------------------- 
          )
 
       if (phase == 'sun') then
@@ -1190,6 +1289,15 @@ contains
          psn_wc    =>    photosyns_inst%psnsun_wc_patch      ! Output: [real(r8) (:)   ]  Rubisco-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
          psn_wj    =>    photosyns_inst%psnsun_wj_patch      ! Output: [real(r8) (:)   ]  RuBP-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
          psn_wp    =>    photosyns_inst%psnsun_wp_patch      ! Output: [real(r8) (:)   ]  product-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
+! MS added-------------------------------
+         sif       =>    photosyns_inst%sifsun_patch         ! Output: [real(r8) (:)   ]  canopy layer: solar-induced fluorescence (W/m**2) [always +]
+         anet      =>    photosyns_inst%anetsun_patch        ! Output: [real(r8) (:)   ]  canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+         fs        =>    photosyns_inst%fyieldsun_patch      ! Output: [real(r8) (:)   ]  fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         ps        =>    photosyns_inst%pyieldsun_patch      ! Output: [real(r8) (:)   ]  photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         xsat      =>    photosyns_inst%xsatsun_patch        ! Output: [real(r8) (:)   ]  light saturation used in fluorescence model (ja/qabs)
+!        sif_z     =>    photosyns_inst%sif_z_sun_patch      ! Output: [real(r8) (:,:) ]  canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+!        an_z      =>    photosyns_inst%an_z_sun_patch       ! Output: [real(r8) (:,:) ]  canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+! MS ends--------------------------------
       else if (phase == 'sha') then
          par_z     =>    solarabs_inst%parsha_z_patch        ! Input:  [real(r8) (:,:) ]  par absorbed per unit lai for canopy layer (w/m**2)
          lai_z     =>    canopystate_inst%laisha_z_patch     ! Input:  [real(r8) (:,:) ]  leaf area index for canopy layer, sunlit or shaded
@@ -1207,16 +1315,21 @@ contains
          psn_wc    =>    photosyns_inst%psnsha_wc_patch      ! Output: [real(r8) (:)   ]  Rubisco-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
          psn_wj    =>    photosyns_inst%psnsha_wj_patch      ! Output: [real(r8) (:)   ]  RuBP-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
          psn_wp    =>    photosyns_inst%psnsha_wp_patch      ! Output: [real(r8) (:)   ]  product-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
+! MS added-------------------------------
+         sif       =>    photosyns_inst%sifsha_patch         ! Output: [real(r8) (:)   ]  canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+         anet      =>    photosyns_inst%anetsha_patch        ! Output: [real(r8) (:)   ]  canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+         fs        =>    photosyns_inst%fyieldsha_patch      ! Output: [real(r8) (:)   ]  fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         ps        =>    photosyns_inst%pyieldsha_patch      ! Output: [real(r8) (:)   ]  photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         xsat      =>    photosyns_inst%xsatsha_patch        ! Output: [real(r8) (:)   ]  light saturation used in fluorescence model (ja/qabs)
+!        sif_z     =>    photosyns_inst%sif_z_sha_patch      ! Output: [real(r8) (:,:) ]  canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+!        an_z      =>    photosyns_inst%an_z_sha_patch       ! Output: [real(r8) (:,:) ]  canopy layer: net assimilation (umol co2 /m**2/ s) [always +]
+! MS ends--------------------------------
       end if
 
       !==============================================================================!
       ! Photosynthesis and stomatal conductance parameters, from:
       ! Bonan et al (2011) JGR, 116, doi:10.1029/2010JG001593
       !==============================================================================!
-
-      ! Determine seconds of current time step
-
-      dtime = get_step_size()
 
       ! vcmax25 parameters, from CN
 
@@ -1258,6 +1371,7 @@ contains
       do f = 1, fn
          p = filterp(f)
          c = patch%column(p)
+	 g = patch%gridcell(p)  ! MS added
 
          ! C3 or C4 photosynthesis logical variable
 
@@ -1508,7 +1622,6 @@ contains
                if ( use_c13 ) then
                   alphapsn(p) = 1._r8
                end if
-
             else                                     ! day time
 
                if(use_luna.and.c3flag(p).and.crop(patch%itype(p))== 0)then
@@ -1575,7 +1688,6 @@ contains
       do f = 1, fn
          p = filterp(f)
          c = patch%column(p)
-         g = patch%gridcell(p)
 
          ! Leaf boundary layer conductance, umol/m**2/s
 
@@ -1584,7 +1696,6 @@ contains
          gb_mol(p) = gb * cf
 
          ! Loop through canopy layers (above snow). Only do calculations if daytime
-
          do iv = 1, nrad(p)
 
             if (par_z(p,iv) <= 0._r8) then           ! night time
@@ -1601,7 +1712,16 @@ contains
                rs_z(p,iv) = min(rsmax0, 1._r8/bbb(p) * cf)
                ci_z(p,iv) = 0._r8
                rh_leaf(p) = 0._r8
-
+! MS added & based on the code from LJE, XY & BMR-------------
+               sif_z(p,iv) = 0._r8
+	       an_z(p,iv)  = 0._r8
+               fs_z(p,iv)  = 0._r8
+               ps_z(p,iv)  = 0._r8
+               xsat_z(p,iv)= 0._r8
+               fs(p)       = 0._r8     !   All yields and light saturation go to zero at night
+               ps(p)       = 0._r8
+               xsat(p)     = 0._r8
+! MS ends--------------------------------------------------------------
             else                                     ! day time
 
                !now the constraint is no longer needed, Jinyun Tang
@@ -1650,21 +1770,6 @@ contains
 
                if (an(p,iv) < 0._r8) gs_mol(p,iv) = bbb(p)
 
-               ! Use time period 1 hour before and 1 hour after local noon inclusive (11AM-1PM)
-               if ( is_near_local_noon( grc%londeg(g), deltasec=3600 ) )then
-                  if (phase == 'sun') then
-                     gs_mol_sun_ln(p,iv) = gs_mol(p,iv)
-                  else if (phase == 'sha') then
-                     gs_mol_sha_ln(p,iv) = gs_mol(p,iv)
-                  end if
-               else
-                  if (phase == 'sun') then
-                     gs_mol_sun_ln(p,iv) = spval
-                  else if (phase == 'sha') then
-                     gs_mol_sha_ln(p,iv) = spval
-                  end if
-               end if
-
                ! Final estimates for cs and ci (needed for early exit of ci iteration when an < 0)
 
                cs = cair(p) - 1.4_r8/gb_mol(p) * an(p,iv) * forc_pbot(c)
@@ -1690,6 +1795,8 @@ contains
                psn_wj_z(p,iv) = 0._r8
                psn_wp_z(p,iv) = 0._r8
 
+	       an_z(p,iv) = ag(p,iv)-lmr_z(p,iv)   ! MS included
+
                if (ac(p,iv) <= aj(p,iv) .and. ac(p,iv) <= ap(p,iv)) then
                   psn_wc_z(p,iv) =  psn_z(p,iv)
                else if (aj(p,iv) < ac(p,iv) .and. aj(p,iv) <= ap(p,iv)) then
@@ -1698,6 +1805,39 @@ contains
                   psn_wp_z(p,iv) =  psn_z(p,iv)
                end if
 
+! MS added into CLM5 and based on the code from LJE, XY & BMR --------------------
+
+               po0 = 1._r8-fnps      ! Defining dark adapted max photochemical yield
+
+               if(c3flag(p)) then
+
+                 !! Original potential Ja without nitrogen downscaling
+                 !! ja= max(4._r8*psn_z(p,iv)*(ci_z(p,iv)+2._r8*cp(p))/(ci_z(p,iv)-cp(p)), 0._r8)   ! Lee et al. (2015) (umol electrons m-2 s-1)
+
+                 ! BMR Start actual Ja that includes nitrogen downscaling
+
+                   co2(p)              =  forc_pco2(g)
+
+                   ci_z_downreg(p,iv)  =  co2(p) - ((an(p,iv) * (1._r8-downreg(p))) * forc_pbot(g) * &
+                                         (1.4_r8*gs_mol(p,iv)+1.6_r8*gb_mol(p)) / (gb_mol(p)*gs_mol(p,iv)))     ! Following subroutine Fractionation
+
+                   ja                  = max(4._r8*psn_z(p,iv)*(1._r8-downreg(p))*(ci_z_downreg(p,iv)+2._r8*cp(p))/(ci_z_downreg(p,iv)-cp(p)), 0._r8)  ! (umol electrons m-2 s-1)
+
+                 ! BMR End actual Ja that includes nitrogen downscaling
+
+                   xsat_z(p,iv)        = ja/qabs
+                   ps_z(p,iv)  	       = xsat_z(p,iv)*po0
+               else
+                   ps_z(p,iv)          = psn_z(p,iv)/aj(p,iv)*po0
+
+               end if
+
+              if (psn_z(p,iv) <= 0._r8)  xsat_z(p,iv)=0._r8
+              call fluorescence(ps_z(p,iv),po0,fs_z(p,iv))
+
+              sif_z(p,iv) = fs_z(p,iv) * par_z(p,iv)               ! (W m-2) = (photon absorbed photon emitted of PAR)*(W m-2)
+                                                                   ! (W m-2) = (W W-1)*(W m-2) equivalent expression for fluorescence yield
+!-----MS ends --------------------------------------------------------------------
                ! Make sure iterative solution is correct
 
                if (gs_mol(p,iv) < 0._r8) then
@@ -1739,6 +1879,13 @@ contains
          lmrcan = 0._r8
          gscan = 0._r8
          laican = 0._r8
+! MS added the code from LJE & XY & BMR-------------
+         sifcan    = 0._r8
+         ancan     = 0._r8
+         fyieldcan = 0._r8
+         pyieldcan = 0._r8
+         xsatcan   = 0._r8
+! MS ends ------------------------------------------
          do iv = 1, nrad(p)
             psncan = psncan + psn_z(p,iv) * lai_z(p,iv)
             psncan_wc = psncan_wc + psn_wc_z(p,iv) * lai_z(p,iv)
@@ -1747,6 +1894,13 @@ contains
             lmrcan = lmrcan + lmr_z(p,iv) * lai_z(p,iv)
             gscan = gscan + lai_z(p,iv) / (rb(p)+rs_z(p,iv))
             laican = laican + lai_z(p,iv)
+! MS added the code from LJE, XY & BMR---------------------------
+            sifcan    = sifcan    + sif_z(p,iv) * lai_z(p,iv)
+            ancan     = ancan     + an_z(p,iv)  * lai_z(p,iv)
+            fyieldcan = fyieldcan + fs_z(p,iv)  * lai_z(p,iv)
+            pyieldcan = pyieldcan + ps_z(p,iv)  * lai_z(p,iv)
+            xsatcan   = xsatcan   + xsat_z(p,iv)* lai_z(p,iv)
+! MS ends--------------------------------------------------------
          end do
          if (laican > 0._r8) then
             psn(p) = psncan / laican
@@ -1755,6 +1909,13 @@ contains
             psn_wp(p) = psncan_wp / laican
             lmr(p) = lmrcan / laican
             rs(p) = laican / gscan - rb(p)
+! MS added the code from LJE, XY & BMR-------------Per leaf area basis for sunlit or shaded layer----
+            sif(p)  = sifcan    / laican
+            anet(p) = ancan     / laican
+            fs(p)   = fyieldcan / laican
+            ps(p)   = pyieldcan / laican
+            xsat(p) = xsatcan   / laican
+! MS ends-------------------------------------------------------------------------------------------
          else
             psn(p) =  0._r8
             psn_wc(p) =  0._r8
@@ -1762,6 +1923,13 @@ contains
             psn_wp(p) =  0._r8
             lmr(p) = 0._r8
             rs(p) = 0._r8
+! MS added the code from LJE, XY & BMR-------------
+            sif(p) =  0._r8
+            anet(p)=  0._r8         ! BMR 8/6/15
+            fs(p)  =  0._r8
+            ps(p)  =  0._r8
+            xsat(p)=  0._r8
+! MS ends------------------------------------------
          end if
       end do
 
@@ -1817,7 +1985,27 @@ contains
          fpsn        => photosyns_inst%fpsn_patch        , & ! Output: [real(r8) (:) ]  photosynthesis (umol CO2 /m**2 /s)
          fpsn_wc     => photosyns_inst%fpsn_wc_patch     , & ! Output: [real(r8) (:) ]  Rubisco-limited photosynthesis (umol CO2 /m**2 /s)
          fpsn_wj     => photosyns_inst%fpsn_wj_patch     , & ! Output: [real(r8) (:) ]  RuBP-limited photosynthesis (umol CO2 /m**2 /s)
-         fpsn_wp     => photosyns_inst%fpsn_wp_patch       & ! Output: [real(r8) (:) ]  product-limited photosynthesis (umol CO2 /m**2 /s)
+         fpsn_wp     => photosyns_inst%fpsn_wp_patch     , & ! Output: [real(r8) (:) ]  product-limited photosynthesis (umol CO2 /m**2 /s)
+! MS added --------------------------------------------------------------------------------------
+         fsif        => photosyns_inst%fsif_patch        , & ! Output: [real(r8) (:) ]  solar-induced fluorescence (W/m**2)   [always +]
+         fan         => photosyns_inst%fan_patch         , & ! Output: [real(r8) (:) ]  net assimilation (umol CO2 /m**2 /s)
+         fyield      => photosyns_inst%fyield_patch      , & ! Output: [real(r8) (:) ]  fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         pyield      => photosyns_inst%pyield_patch      , & ! Output: [real(r8) (:) ]  photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         fxsat       => photosyns_inst%fxsat_patch       , & ! Output: [real(r8) (:) ]
+         sifsun      => photosyns_inst%sifsun_patch      , & ! Output: [real(r8) (:) ]  canopy sun-lid layer: solar-induced fluorescence (W/m**2) [always +]
+         sifsha      => photosyns_inst%sifsha_patch      , & ! Output: [real(r8) (:) ]  canopy shaded  layer: solar-induced fluorescence (W/m**2) [always +]
+         anetsun     => photosyns_inst%anetsun_patch     , & ! Output: [real(r8) (:) ]  canopy sun-lid layer: net assimilation (umol CO2 /m**2 /s)
+         anetsha     => photosyns_inst%anetsha_patch     , & ! Output: [real(r8) (:) ]  canopy shaded  layer: net assimilation (umol CO2 /m**2 /s)
+         fyieldsun   => photosyns_inst%fyieldsun_patch   , & ! Output: [real(r8) (:) ]  canopy sun-lid fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         fyieldsha   => photosyns_inst%fyieldsha_patch   , & ! Output: [real(r8) (:) ]  canopy shaded fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         pyieldsun   => photosyns_inst%pyieldsun_patch   , & ! Output: [real(r8) (:) ]  canopy sun-lid photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         pyieldsha   => photosyns_inst%pyieldsha_patch   , & ! Output: [real(r8) (:) ]  canopy shaded photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+         xsatsun     => photosyns_inst%xsatsun_patch     , & ! Output: [real(r8) (:) ]  sun-lid light saturation used in fluorescence model (ja/qabs)
+         xsatsha     => photosyns_inst%xsatsha_patch     , & ! Output: [real(r8) (:) ]  shaded light saturation used in fluorescence model (ja/qabs)
+         elai        => canopystate_inst%elai_patch      , & ! Input:  [real(r8) (:) ]  one-sided leaf area index with burying by snow
+	 apar	     => photosyns_inst%apar_patch	 , & ! Output: [real(r8) (:) ]  APAR (W/m2)
+	 parsun	     => photosyns_inst%parsun_patch      , & ! Output: [real(r8) (:) ]  APAR sun-lit (W/m2) 
+         parsha      => photosyns_inst%parsha_patch        & ! Output: [real(r8) (:) ]  APAR shaded (W/m2)
          )
 
       if ( use_c14 ) then
@@ -1843,6 +2031,21 @@ contains
             fpsn_wc(p) = psnsun_wc(p)*laisun(p) + psnsha_wc(p)*laisha(p)
             fpsn_wj(p) = psnsun_wj(p)*laisun(p) + psnsha_wj(p)*laisha(p)
             fpsn_wp(p) = psnsun_wp(p)*laisun(p) + psnsha_wp(p)*laisha(p)
+! MS added -------------------------------------------------------------------------------------------------------------
+            fsif(p)    = sifsun(p)   *laisun(p) + sifsha(p)   *laisha(p)
+	    apar(p)    = parsun(p)   *laisun(p) + parsha(p)   *laisha(p)
+            fan(p)     = anetsun(p)  *laisun(p) + anetsha(p)  *laisha(p)
+            !bmr *****  Calculating sun/shaded weighted version of fyield and pyield for diagnosis
+            if (elai(p) > 0._r8) then
+               fyield(p) =  (laisun(p)*fyieldsun(p) +  laisha(p)*fyieldsha(p))/ max(elai(p), 0.01_r8)
+               pyield(p) =  (laisun(p)*pyieldsun(p) +  laisha(p)*pyieldsha(p))/ max(elai(p), 0.01_r8)
+               fxsat(p)  =  (laisun(p)*xsatsun(p)   +  laisha(p)*xsatsha(p))/   max(elai(p), 0.01_r8)
+            else
+               fyield(p) =  0._r8
+               pyield(p) =  0._r8
+               fxsat(p)  =  0._r8
+            end if
+! MS ends ----------------------------------------------------The C13 related part from BMR is not included ------------
          end if
 
          if (use_cn) then
@@ -2414,13 +2617,57 @@ contains
 
   end subroutine ci_func
 
-  !------------------------------------------------------------------------------
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: Fluorescence
+!
+! !INTERFACE:
+subroutine fluorescence(ps, po0, fs)
+
+   !
+   !! DESCRIPTION:
+   ! Chlorophyll fluorescence
+
+   ! !REVISION HISTORY:
+   ! writen by Jung-Eun Lee using van der Tol and Berry (2012)
+   ! modified by Mengxi Wu
+   ! Adopted by Raczka 10/15/17
+   ! Integrated into CLM5.0 By MS 02/21/2018
+
+   !!USES
+   use shr_kind_mod , only : r8 => shr_kind_r8
+   !
+   !ARGUMENTS:
+   implicit none
+   real(r8), intent(in) :: ps   ! photochemical yield
+   real(r8), intent(in) :: po0  ! dark adapted photochemical yield
+   real(r8), intent(out) :: fs  ! fluorescence yield
+   real(r8) :: Kf               ! rate constant for fluorescence
+   real(r8) :: Kd               ! rate constant for thermal deactivation
+   real(r8) :: Kn               ! rate constant for non-photochemical quenching
+   real(r8) :: x                ! degree of light saturation
+   real(r8) :: fm               ! light adapted fluorescence yield Fm
+
+   Kf   = 0.05_r8
+   Kd   = 0.95_r8               ! by following Lee et al (2015), MS tweaked this number from 0.95 to 0.87 for testing
+
+   x    = 1._r8 - ps / po0
+   Kn   = (6.2473_r8 * x - 0.5944_r8) * x       ! empirical fit to Flexas' data
+!  Kn   = (3.9867_r8 * x - 1.0589_r8) * x       ! empirical fit to Flexas, Daumard, Rascher, Berry data
+
+   fm   = Kf / (Kf + Kd + Kn)
+   fs   = fm * (1._r8 - ps)
+end subroutine fluorescence
+!------------------------------------------------------------------------------
+
+!------------------------------------------------------------------------------
   subroutine PhotosynthesisHydraulicStress ( bounds, fn, filterp, &
-       esat_tv, eair, oair, cair, rb, bsun, bsha, btran, dayl_factor, leafn, &
+       esat_tv, eair, oair, cair, rb, bsun, bsha, btran, dayl_factor, leafn, downreg,&
        qsatl, qaf, &
-       atm2lnd_inst, temperature_inst, soilstate_inst, waterdiagnosticbulk_inst, &
+       atm2lnd_inst, temperature_inst, soilstate_inst, waterstate_inst, &
        surfalb_inst, solarabs_inst, canopystate_inst, ozone_inst, &
-       photosyns_inst, waterfluxbulk_inst, froot_carbon, croot_carbon)
+       photosyns_inst, waterflux_inst, froot_carbon, croot_carbon)
     !
     ! !DESCRIPTION:
     ! Leaf photosynthesis and stomatal conductance calculation as described by
@@ -2431,9 +2678,7 @@ contains
     ! method
     !
     ! !USES:
-    use clm_varcon        , only : rgas, tfrz, rpi, spval
-    use GridcellType      , only : grc
-    use clm_time_manager  , only : get_step_size, is_near_local_noon
+    use clm_varcon        , only : rgas, tfrz, rpi
     use clm_varctl        , only : cnallocate_carbon_only
     use clm_varctl        , only : lnc_opt, reduce_dayl_factor, vcmax_opt    
     use clm_varpar        , only : nlevsoi
@@ -2455,19 +2700,20 @@ contains
     real(r8)               , intent(in)    :: qsatl ( bounds%begp: )         ! leaf specific humidity [kg/kg]
     real(r8)               , intent(in)    :: qaf ( bounds%begp: )           ! humidity of canopy air [kg/kg]
     real(r8)               , intent(in)    :: leafn( bounds%begp: )          ! leaf N (gN/m2)
+    real(r8)               , intent(in)    :: downreg( bounds%begp: )        ! fractional reduction in GPP due to N limitation (dimensionless)  ! MS Added
     real(r8)               , intent(out)   :: bsun( bounds%begp: )           ! sunlit canopy transpiration wetness factor (0 to 1)
     real(r8)               , intent(out)   :: bsha( bounds%begp: )           ! shaded canopy transpiration wetness factor (0 to 1)
     real(r8)               , intent(out)   :: btran( bounds%begp: )          ! transpiration wetness factor (0 to 1) [pft]
-    real(r8)               , intent(in)    :: froot_carbon( bounds%begp: )    ! fine root carbon (gC/m2) [pft]   
-    real(r8)               , intent(in)    :: croot_carbon( bounds%begp: )    ! live coarse root carbon (gC/m2) [pft]   
+    real(r8)               , intent(in)    :: froot_carbon( bounds%begp: )   ! fine root carbon (gC/m2) [pft]   
+    real(r8)               , intent(in)    :: croot_carbon( bounds%begp: )   ! live coarse root carbon (gC/m2) [pft]   
 
     type(atm2lnd_type)     , intent(in)    :: atm2lnd_inst
     type(temperature_type) , intent(in)    :: temperature_inst
     type(surfalb_type)     , intent(in)    :: surfalb_inst
     type(solarabs_type)    , intent(in)    :: solarabs_inst
     type(canopystate_type) , intent(inout) :: canopystate_inst
-    type(waterdiagnosticbulk_type)  , intent(inout) :: waterdiagnosticbulk_inst
-    type(waterfluxbulk_type)   , intent(inout) :: waterfluxbulk_inst
+    type(waterstate_type)  , intent(inout) :: waterstate_inst
+    type(waterflux_type)   , intent(inout) :: waterflux_inst
     type(soilstate_type)   , intent(inout) :: soilstate_inst
     class(ozone_base_type) , intent(in)    :: ozone_inst
     type(photosyns_type)   , intent(inout) :: photosyns_inst
@@ -2527,7 +2773,7 @@ contains
     real(r8) :: theta_ip       ! empirical curvature parameter for ap photosynthesis co-limitation
 
     ! Other
-    integer  :: f,p,c,iv          ! indices
+    integer  :: f,p,c,iv,g        ! indices  ! MS addded g
     real(r8) :: cf                ! s m**2/umol -> s/m
     real(r8) :: rsmax0            ! maximum stomatal resistance [s/m]
     real(r8) :: gb                ! leaf boundary layer conductance (m/s)
@@ -2623,8 +2869,8 @@ contains
     real(r8) :: sum_nscaler
     real(r8) :: total_lai                
     integer  :: nptreemax                
-    real(r8) :: dtime                           ! land model time step (sec)
-    integer  :: j,g                     ! index
+!scs
+    integer  :: j                       ! index
     real(r8) :: rs_resis                ! combined soil-root resistance [s]
     real(r8) :: r_soil                  ! root spacing [m]
     real(r8) :: root_biomass_density    ! root biomass density [g/m3]
@@ -2643,7 +2889,52 @@ contains
     real(r8), parameter :: croot_lateral_length = 0.25_r8   ! specified lateral coarse root length [m]
     real(r8), parameter :: c_to_b = 2.0_r8           !(g biomass /g C)
 !Note that root density is for dry biomass not carbon. CLM provides root biomass as carbon. The conversion is 0.5 g C / g biomass
+    ! MS Added
+    real(r8) , pointer :: sifsun       (:)                      ! canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+    real(r8) , pointer :: anetsun      (:)                      ! canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+    real(r8) , pointer :: fyieldsun    (:)                      ! fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+    real(r8) , pointer :: pyieldsun    (:)                      ! photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+    real(r8) , pointer :: xsatsun      (:)                      ! saturation used in fluorescence model (ja/qabs)
 
+    real(r8) , pointer :: sifsha       (:)                      ! canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+    real(r8) , pointer :: anetsha      (:)                      ! canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+    real(r8) , pointer :: fyieldsha    (:)                      ! fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+    real(r8) , pointer :: pyieldsha    (:)                      ! photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+    real(r8) , pointer :: xsatsha      (:)                      ! saturation used in fluorescence model (ja/qabs)
+  
+    real(r8) , pointer :: parsun       (:)                      ! sun-lit par (W/m**2)
+    real(r8) , pointer :: parsha       (:)                      ! shaded  par (W/m**2)
+
+    ! Local variables
+    real(r8) :: ja_sun                                          ! electron transport rate as defined by Lee et al. 2015. (umol electrons/m**2/s)
+    real(r8) :: ja_sha						! electron transport rate as defined by Lee et al. 2015. (umol electrons/m**2/s)
+    real(r8) :: po0                                             ! dark adapted photochemical yield
+    real(r8) :: co2(bounds%begp:bounds%endp)                    ! partial pressure co2 (Pa)
+    real(r8) :: sif_z_sun(bounds%begp:bounds%endp,nlevcan)      ! canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+    real(r8) :: sif_z_sha(bounds%begp:bounds%endp,nlevcan)      ! canopy layer: solar-induced fluorescence (W/m**2)   [always +]	
+    real(r8) :: an_z_sun(bounds%begp:bounds%endp,nlevcan)       ! canopy layer: net assimilation (umol co2 /m**2/ s)  [always +] 
+    real(r8) :: an_z_sha(bounds%begp:bounds%endp,nlevcan)       ! canopy layer: net assimilation (umol co2 /m**2/ s)  [always +] 
+    real(r8) :: fs_z_sun(bounds%begp:bounds%endp,nlevcan)       ! canopy layer: fluorescence yield
+    real(r8) :: fs_z_sha(bounds%begp:bounds%endp,nlevcan)       ! canopy layer: fluorescence yield
+    real(r8) :: ps_z_sun(bounds%begp:bounds%endp,nlevcan)       ! canopy layer: photochemical yield
+    real(r8) :: ps_z_sha(bounds%begp:bounds%endp,nlevcan)       ! canopy layer: photochemical yield
+    real(r8) :: xsat_z_sun(bounds%begp:bounds%endp,nlevcan)     ! canopy layer: light saturation
+    real(r8) :: xsat_z_sha(bounds%begp:bounds%endp,nlevcan)     ! canopy layer: light saturation
+    real(r8) :: kk_z_sun(bounds%begp:bounds%endp,nlevcan)       ! k values obtained from sunlit Vcmax25 
+    real(r8) :: kk_z_sha(bounds%begp:bounds%endp,nlevcan)       ! k values obtained from shaded Vcmax25
+    real(r8) :: sifcan_sun                                      ! canopy sum of sif_z
+    real(r8) :: sifcan_sha                                      ! canopy sum of sif_z
+    real(r8) :: ancan_sun                                       ! can_sunopy sum of an_z
+    real(r8) :: ancan_sha                                       ! can_shaopy sum of an_z
+    real(r8) :: fyieldcan_sun                                   ! can_sunopy sum of fs_z
+    real(r8) :: fyieldcan_sha                                   ! can_shaopy sum of fs_z
+    real(r8) :: pyieldcan_sun                                   ! can_sunopy sum of ps_z
+    real(r8) :: pyieldcan_sha                                   ! can_shaopy sum of ps_z
+    real(r8) :: xsatcan_sun                                     ! can_sunopy sum of xsat_z
+    real(r8) :: xsatcan_sha                                     ! can_shaopy sum of xsat_z
+    real(r8) :: parcan_sun                                      ! canopy sum of par_z_sun
+    real(r8) :: parcan_sha                                      ! canopy sum of par_z_sha
+    ! MS ends
     !------------------------------------------------------------------------------
 
     ! Temperature and soil water response functions
@@ -2665,6 +2956,7 @@ contains
     SHR_ASSERT_ALL((ubound(dayl_factor) == (/bounds%endp/)), errMsg(sourcefile, __LINE__))
     SHR_ASSERT_ALL((ubound(qsatl)       == (/bounds%endp/)), errMsg(sourcefile, __LINE__))
     SHR_ASSERT_ALL((ubound(qaf)         == (/bounds%endp/)), errMsg(sourcefile, __LINE__))
+    SHR_ASSERT_ALL((ubound(downreg)     == (/bounds%endp/)), errMsg(sourcefile, __LINE__))  ! MS Added
 
     associate(                                                 &
          k_soil_root  => soilstate_inst%k_soil_root_patch    , & ! Input:  [real(r8) (:,:) ]  soil-root interface conductance (mm/s)
@@ -2736,8 +3028,9 @@ contains
          an_sha     => photosyns_inst%an_sha_patch           , & ! Output: [real(r8) (:,:) ]  net shaded leaf photosynthesis (umol CO2/m**2/s)
          gs_mol_sun => photosyns_inst%gs_mol_sun_patch       , & ! Output: [real(r8) (:,:) ]  sunlit leaf stomatal conductance (umol H2O/m**2/s)
          gs_mol_sha => photosyns_inst%gs_mol_sha_patch       , & ! Output: [real(r8) (:,:) ]  shaded leaf stomatal conductance (umol H2O/m**2/s)
-         gs_mol_sun_ln => photosyns_inst%gs_mol_sun_ln_patch , & ! Output: [real(r8) (:,:) ]  sunlit leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon (umol H2O/m**2/s)
-         gs_mol_sha_ln => photosyns_inst%gs_mol_sha_ln_patch   & ! Output: [real(r8) (:,:) ]  shaded leaf stomatal conductance averaged over 1 hour before to 1 hour after local noon (umol H2O/m**2/s)
+! MS added variables (bmr)--------
+         forc_pco2   => atm2lnd_inst%forc_pco2_grc             & ! Input:  [real(r8) (:)   ]  partial pressure co2 (Pa)
+! MS ends-------------------------
          )
 
       par_z_sun     =>    solarabs_inst%parsun_z_patch        ! Input:  [real(r8) (:,:) ]  par absorbed per unit lai for canopy layer (w/m**2)
@@ -2772,14 +3065,25 @@ contains
       psn_wc_sha    =>    photosyns_inst%psnsha_wc_patch      ! Output: [real(r8) (:)   ]  Rubisco-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
       psn_wj_sha    =>    photosyns_inst%psnsha_wj_patch      ! Output: [real(r8) (:)   ]  RuBP-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
       psn_wp_sha    =>    photosyns_inst%psnsha_wp_patch      ! Output: [real(r8) (:)   ]  product-limited foliage photosynthesis (umol co2 /m**2/ s) [always +]
+! MS Added
+      sifsun       =>    photosyns_inst%sifsun_patch         ! Output: [real(r8) (:)   ]  canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+      anetsun      =>    photosyns_inst%anetsun_patch        ! Output: [real(r8) (:)   ]  canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+      fyieldsun    =>    photosyns_inst%fyieldsun_patch      ! Output: [real(r8) (:)   ]  fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+      pyieldsun    =>    photosyns_inst%pyieldsun_patch      ! Output: [real(r8) (:)   ]  photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+      xsatsun      =>    photosyns_inst%xsatsun_patch        ! Output: [real(r8) (:)   ]  light saturation used in fluorescence model (ja/qabs)
+      sifsha       =>    photosyns_inst%sifsha_patch         ! Output: [real(r8) (:)   ]  canopy layer: solar-induced fluorescence (W/m**2)   [always +]
+      anetsha      =>    photosyns_inst%anetsha_patch        ! Output: [real(r8) (:)   ]  canopy layer: net assimilation (umol co2 /m**2/ s)  [always +]
+      fyieldsha    =>    photosyns_inst%fyieldsha_patch      ! Output: [real(r8) (:)   ]  fluorescence yield at Fs  [photon emitted photon absorbed-1 of PAR]
+      pyieldsha    =>    photosyns_inst%pyieldsha_patch      ! Output: [real(r8) (:)   ]  photochemical yield at Fs  [photon emitted photon absorbed-1 of PAR]
+      xsatsha      =>    photosyns_inst%xsatsha_patch        ! Output: [real(r8) (:)   ]  light saturation used in fluorescence model (ja/qabs) 
+      parsun       =>    photosyns_inst%parsun_patch         ! Output: [real(r8) (:)   ]  canopy layer: sun-lit par (W /m**2/) [always +]
+      parsha       =>    photosyns_inst%parsha_patch         ! Output: [real(r8) (:)   ]  canopy layer: shaded  par (W /m**2/) [always +]
+! MS ends
+
       !==============================================================================!
       ! Photosynthesis and stomatal conductance parameters, from:
       ! Bonan et al (2011) JGR, 116, doi:10.1029/2010JG001593
       !==============================================================================!
-
-      ! Determine seconds off current time step
-
-      dtime = get_step_size()
 
       ! vcmax25 parameters, from CN
 
@@ -2875,6 +3179,7 @@ contains
       do f = 1, fn
          p = filterp(f)
          c = patch%column(p)
+	 g = patch%gridcell(p)  ! MS added
 
          ! C3 or C4 photosynthesis logical variable
 
@@ -3181,6 +3486,15 @@ contains
                jmax_z(p,sha,iv) = jmax25_sha * ft(t_veg(p), jmaxha) * fth(t_veg(p), jmaxhd, jmaxse, jmaxc)
                tpu_z(p,sha,iv) = tpu25_sha * ft(t_veg(p), tpuha) * fth(t_veg(p), tpuhd, tpuse, tpuc)
 
+!---------------MS Added for calculating kk ---------------------------------
+!               kk_z_sun(p,iv) = 0.58_r8 * 4.6_r8 !!!!vcmax25_sun * 0.0468_r8 + 7.7600_r8  ! MC suggestion 1
+!               kk_z_sha(p,iv) = 0.58_r8 * 4.6_r8 !!!!vcmax25_sha * 0.0468_r8 + 7.7600_r8
+!	        kk_z_sun(p,iv) = vcmax25_sun * 0.0468_r8 + 7.7600_r8               ! MC suggestion 2
+!               kk_z_sha(p,iv) = vcmax25_sha * 0.0468_r8 + 7.7600_r8
+ 	        kk_z_sun(p,iv)  =    1._r8					  ! default
+	        kk_z_sha(p,iv)  =    1._r8
+!---------------MS end-------------------------------------------------------
+
                if (.not. c3flag(p)) then
                   vcmax_z(p,sun,iv) = vcmax25_sun * 2._r8**((t_veg(p)-(tfrz+25._r8))/10._r8)
                   vcmax_z(p,sun,iv) = vcmax_z(p,sun,iv) / (1._r8 + exp( 0.2_r8*((tfrz+15._r8)-t_veg(p)) ))
@@ -3217,7 +3531,6 @@ contains
       do f = 1, fn
          p = filterp(f)
          c = patch%column(p)
-         g = patch%gridcell(p)
 
          ! Leaf boundary layer conductance, umol/m**2/s
 
@@ -3245,18 +3558,21 @@ contains
                   gsminsha = nan
                end if
                call calcstress(p,c,vegwp(p,:),bsun(p),bsha(p),gb_mol(p),gsminsun, gsminsha, &
-                    qsatl(p),qaf(p), atm2lnd_inst,canopystate_inst,waterdiagnosticbulk_inst, &
-                    soilstate_inst,temperature_inst, waterfluxbulk_inst)
+                    qsatl(p),qaf(p), atm2lnd_inst,canopystate_inst,waterstate_inst, &
+                    soilstate_inst,temperature_inst, waterflux_inst)
 
                ac(p,sun,iv) = 0._r8
                aj(p,sun,iv) = 0._r8
                ap(p,sun,iv) = 0._r8
                ag(p,sun,iv) = 0._r8
+!KO               an_sun(p,iv) = ag(p,sun,iv) - bsun(p) * lmr_z_sun(p,iv)
+!KO
                if(crop(patch%itype(p))== 0 .or. .not. modifyphoto_and_lmr_forcrop) then
                   an_sun(p,iv) = ag(p,sun,iv) - bsun(p) * lmr_z_sun(p,iv)
                else
                   an_sun(p,iv) = ag(p,sun,iv) - lmr_z_sun(p,iv)
                endif
+!KO
                psn_z_sun(p,iv) = 0._r8
                psn_wc_z_sun(p,iv) = 0._r8
                psn_wj_z_sun(p,iv) = 0._r8
@@ -3269,11 +3585,14 @@ contains
                aj(p,sha,iv) = 0._r8
                ap(p,sha,iv) = 0._r8
                ag(p,sha,iv) = 0._r8
+!KO               an_sha(p,iv) = ag(p,sha,iv) - bsha(p) * lmr_z_sha(p,iv)
+!KO
                if(crop(patch%itype(p))== 0 .or. .not. modifyphoto_and_lmr_forcrop) then
                   an_sha(p,iv) = ag(p,sha,iv) - bsha(p) * lmr_z_sha(p,iv)
                else
                   an_sha(p,iv) = ag(p,sha,iv) - lmr_z_sha(p,iv)
                endif
+!KO
                psn_z_sha(p,iv) = 0._r8
                psn_wc_z_sha(p,iv) = 0._r8
                psn_wj_z_sha(p,iv) = 0._r8
@@ -3281,7 +3600,31 @@ contains
                rs_z_sha(p,iv) = min(rsmax0, 1._r8/(max( bsha(p)*gsminsha, 1._r8 )) * cf)
                ci_z_sha(p,iv) = 0._r8
                rh_leaf_sha(p) = 0._r8
+! MS added & based on the code from LJE, XY & BMR-------------
+               sif_z_sun(p,iv) = 0._r8
+	       sif_z_sha(p,iv) = 0._r8
+	       an_z_sun(p,iv)  = 0._r8
+               an_z_sha(p,iv)  = 0._r8
+               fs_z_sun(p,iv)  = 0._r8
+	       fs_z_sha(p,iv)  = 0._r8
+               ps_z_sun(p,iv)  = 0._r8
+	       ps_z_sha(p,iv)  = 0._r8
+               xsat_z_sun(p,iv)= 0._r8
+	       xsat_z_sha(p,iv)= 0._r8
 
+	       sifsun(p)       = 0._r8
+	       sifsha(p)       = 0._r8
+	       anetsun(p)      = 0._r8
+	       anetsha(p)      = 0._r8
+               fyieldsun(p)    = 0._r8     !   All yields and light saturation go to zero at night
+	       fyieldsha(p)    = 0._r8     !   All yields and light saturation go to zero at night
+               pyieldsun(p)    = 0._r8
+               pyieldsha(p)    = 0._r8
+               xsatsun(p)      = 0._r8
+               xsatsha(p)      = 0._r8
+	       parsun(p)       = 0._r8
+               parsha(p)       = 0._r8
+! MS ends--------------------------------------------------------------
             else                                     ! day time
 
                !now the constraint is no longer needed, Jinyun Tang
@@ -3327,7 +3670,7 @@ contains
                                je_sha, cair(p), oair(p), lmr_z_sun(p,iv), lmr_z_sha(p,iv), &
                                par_z_sun(p,iv), par_z_sha(p,iv), rh_can, gs_mol_sun(p,iv), gs_mol_sha(p,iv), &
                                qsatl(p), qaf(p), iter1, iter2, atm2lnd_inst, photosyns_inst, &
-                               canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst, waterfluxbulk_inst)
+                               canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst, waterflux_inst)
                if ( stomatalcond_mtd == stomatalcond_mtd_medlyn2011 )then
                   gsminsun     = medlynintercept(patch%itype(p))
                   gsminsha     = medlynintercept(patch%itype(p))
@@ -3344,14 +3687,6 @@ contains
 
                if (an_sun(p,iv) < 0._r8) gs_mol_sun(p,iv) = max( bsun(p)*gsminsun, 1._r8 )
                if (an_sha(p,iv) < 0._r8) gs_mol_sha(p,iv) = max( bsha(p)*gsminsha, 1._r8 )
-               ! Use time period 1 hour before and 1 hour after local noon inclusive (11AM-1PM)
-               if ( is_near_local_noon( grc%londeg(g), deltasec=3600 ) )then
-                  gs_mol_sun_ln(p,iv) = gs_mol_sun(p,iv)
-                  gs_mol_sha_ln(p,iv) = gs_mol_sha(p,iv)
-               else
-                  gs_mol_sun_ln(p,iv) = spval
-                  gs_mol_sha_ln(p,iv) = spval
-               end if
 
                ! Final estimates for cs and ci (needed for early exit of ci iteration when an < 0)
 
@@ -3392,6 +3727,8 @@ contains
                psn_wc_z_sun(p,iv) = 0._r8
                psn_wj_z_sun(p,iv) = 0._r8
                psn_wp_z_sun(p,iv) = 0._r8
+		
+               an_z_sun(p,iv) = ag(p,sun,iv)-lmr_z_sun(p,iv)   ! MS included
 
                if (ac(p,sun,iv) <= aj(p,sun,iv) .and. ac(p,sun,iv) <= ap(p,sun,iv)) then
                   psn_wc_z_sun(p,iv) =  psn_z_sun(p,iv)
@@ -3400,13 +3737,44 @@ contains
                else if (ap(p,sun,iv) < ac(p,sun,iv) .and. ap(p,sun,iv) < aj(p,sun,iv)) then
                   psn_wp_z_sun(p,iv) =  psn_z_sun(p,iv)
                end if
+! MS added into CLM5 and based on the code from LJE, XY & BMR --------------------
 
+               po0 = 1._r8 - fnps      ! Defining dark adapted max photochemical yield
+
+               if(c3flag(p)) then
+
+               ! ! Original potential Ja without nitrogen downscaling
+
+                co2(p)	=	 forc_pco2(g)
+	        ja_sun  = 	 max(4._r8*psn_z_sun(p,iv)*(ci_z_sun(p,iv)+2._r8*cp(p))/(ci_z_sun(p,iv)-cp(p)), 0._r8)   ! Lee et al. (2015) (umol electrons m-2 s-1)
+
+                xsat_z_sun(p,iv)	= ja_sun/qabs
+                ps_z_sun(p,iv)  	= xsat_z_sun(p,iv)*po0
+                else
+                  ps_z_sun(p,iv)  	= psn_z_sun(p,iv)/aj(p,sun,iv)*po0
+               end if
+	
+	       ps_z_sun(p,iv)	       =  max(ps_z_sun(p,iv),0._r8)	
+
+               if (psn_z_sun(p,iv) <= 0._r8)  xsat_z_sun(p,iv)=0._r8
+
+               call fluorescence(ps_z_sun(p,iv),po0,fs_z_sun(p,iv))
+
+	       fs_z_sun(p,iv)           = max(fs_z_sun(p,iv),0._r8)
+
+               sif_z_sun(p,iv)          = fs_z_sun(p,iv) * par_z_sun(p,iv)            ! (W m-2) = (photon absorbed photon emitted of PAR)*(W m-2)
+                                                                                      ! (W m-2) = (W W-1)*(W m-2) equivalent expression for fluorescence yield
+	       sif_z_sun(p,iv)          = sif_z_sun(p,iv)/kk_z_sun(p,iv)              ! 1 W/m2  = 4.6 umol/m2/s | SIF was converted to umol/m2/s first,
+                                                                                      ! and then integrated to canopy level by following Lee et al (2015)
+!-----MS ends --------------------------------------------------------------------
                psn_z_sha(p,iv) = ag(p,sha,iv)
                psn_z_sha(p,iv) = psn_z_sha(p,iv) * o3coefv_sha(p)
 
                psn_wc_z_sha(p,iv) = 0._r8
                psn_wj_z_sha(p,iv) = 0._r8
                psn_wp_z_sha(p,iv) = 0._r8
+
+	       an_z_sha(p,iv)     = ag(p,sha,iv)-lmr_z_sha(p,iv)   ! MS included
 
                if (ac(p,sha,iv) <= aj(p,sha,iv) .and. ac(p,sha,iv) <= ap(p,sha,iv)) then
                   psn_wc_z_sha(p,iv) =  psn_z_sha(p,iv)
@@ -3415,7 +3783,34 @@ contains
                else if (ap(p,sha,iv) < ac(p,sha,iv) .and. ap(p,sha,iv) < aj(p,sha,iv)) then
                   psn_wp_z_sha(p,iv) =  psn_z_sha(p,iv)
                end if
+! MS added into CLM5 and based on the code from LJE, XY & BMR --------------------
 
+	       po0 = 1._r8 - fnps      ! Defining dark adapted max photochemical yield
+
+	       if(c3flag(p)) then
+               !  ! Original potential Ja without nitrogen downscaling
+
+                  co2(p)        =        forc_pco2(g)
+                  ja_sha        =        max(4._r8*psn_z_sha(p,iv)*(ci_z_sha(p,iv)+2._r8*cp(p))/(ci_z_sha(p,iv)-cp(p)), 0._r8)
+
+                  xsat_z_sha(p,iv)      = ja_sha/qabs
+                  ps_z_sha(p,iv)        = xsat_z_sha(p,iv)*po0
+               else
+                  ps_z_sha(p,iv)        = psn_z_sha(p,iv)/aj(p,sha,iv) * po0
+               end if
+
+	       ps_z_sha(p,iv)   	= max(ps_z_sha(p,iv),0._r8)  ! MS added this line to make sure ps_z_sun is no larger than 1.
+               
+ 	       if (psn_z_sha(p,iv) <= 0._r8)  xsat_z_sha(p,iv)=0._r8
+
+               call fluorescence(ps_z_sha(p,iv),po0,fs_z_sha(p,iv))
+
+	       fs_z_sha(p,iv)           = max(fs_z_sha(p,iv),0._r8)
+
+               sif_z_sha(p,iv)          = fs_z_sha(p,iv) * par_z_sha(p,iv)
+  	       sif_z_sha(p,iv)          = sif_z_sha(p,iv)/kk_z_sha(p,iv)              ! 1 W/m2  = 4.6 umol/m2/s | SIF was converted to umol/m2/s first, 
+									              ! and then integrated to canopy level by following Lee et al (2015)
+!-----MS ends --------------------------------------------------------------------
                ! Make sure iterative solution is correct
 
                if (gs_mol_sun(p,iv) < 0._r8 .or. gs_mol_sha(p,iv) < 0._r8) then
@@ -3466,34 +3861,73 @@ contains
          lmrcan_sun = 0._r8
          gscan_sun = 0._r8
          laican_sun = 0._r8
+! MS added
+	 sifcan_sun    = 0._r8
+         ancan_sun     = 0._r8
+         fyieldcan_sun = 0._r8
+         pyieldcan_sun = 0._r8
+         xsatcan_sun   = 0._r8
+         parcan_sun    = 0._r8
+! MS ends
          do iv = 1, nrad(p)
             psncan_sun = psncan_sun + psn_z_sun(p,iv) * lai_z_sun(p,iv)
             psncan_wc_sun = psncan_wc_sun + psn_wc_z_sun(p,iv) * lai_z_sun(p,iv)
             psncan_wj_sun = psncan_wj_sun + psn_wj_z_sun(p,iv) * lai_z_sun(p,iv)
             psncan_wp_sun = psncan_wp_sun + psn_wp_z_sun(p,iv) * lai_z_sun(p,iv)
+!KO         lmrcan_sun = lmrcan_sun + lmr_z_sun(p,iv) * lai_z_sun(p,iv)
+!KO
+!           lmrcan_sun = lmrcan_sun + lmr_z_sun(p,iv) * lai_z_sun(p,iv) * bsun(p)
+!KO
+!KO
             if(crop(patch%itype(p))== 0 .and. modifyphoto_and_lmr_forcrop) then
                lmrcan_sun = lmrcan_sun + lmr_z_sun(p,iv) * lai_z_sun(p,iv) * bsun(p)
             else
                lmrcan_sun = lmrcan_sun + lmr_z_sun(p,iv) * lai_z_sun(p,iv)
             endif
+!KO
             gscan_sun = gscan_sun + lai_z_sun(p,iv) / (rb(p)+rs_z_sun(p,iv))
             laican_sun = laican_sun + lai_z_sun(p,iv)
+! MS added the code from LJE, XY & BMR---------------------------
+            sifcan_sun    = sifcan_sun    + sif_z_sun(p,iv) * lai_z_sun(p,iv)
+            ancan_sun     = ancan_sun     + an_z_sun(p,iv)  * lai_z_sun(p,iv)
+            fyieldcan_sun = fyieldcan_sun + fs_z_sun(p,iv)  * lai_z_sun(p,iv)
+            pyieldcan_sun = pyieldcan_sun + ps_z_sun(p,iv)  * lai_z_sun(p,iv)
+            xsatcan_sun   = xsatcan_sun   + xsat_z_sun(p,iv)* lai_z_sun(p,iv)
+	    parcan_sun    = parcan_sun    + par_z_sun(p,iv) * lai_z_sun(p,iv)
+! MS ends--------------------------------------------------------
          end do
          if (laican_sun > 0._r8) then
             psn_sun(p) = psncan_sun / laican_sun
             psn_wc_sun(p) = psncan_wc_sun / laican_sun
             psn_wj_sun(p) = psncan_wj_sun / laican_sun
             psn_wp_sun(p) = psncan_wp_sun / laican_sun
-            lmr_sun(p) = lmrcan_sun / laican_sun
-            rs_sun(p) = laican_sun / gscan_sun - rb(p)
+            lmr_sun(p)    = lmrcan_sun / laican_sun
+            rs_sun(p)     = laican_sun / gscan_sun - rb(p)
+! MS added
+	    sifsun(p) 	= sifcan_sun    / laican_sun
+            anetsun(p)  = ancan_sun     / laican_sun
+            fyieldsun(p)= fyieldcan_sun / laican_sun
+            pyieldsun(p)= pyieldcan_sun / laican_sun
+            xsatsun(p)  = xsatcan_sun   / laican_sun
+            parsun(p)   = parcan_sun    / laican_sun
+! MS ends
          else
-            psn_sun(p) =  0._r8
+            psn_sun(p)    =  0._r8
             psn_wc_sun(p) =  0._r8
             psn_wj_sun(p) =  0._r8
             psn_wp_sun(p) =  0._r8
-            lmr_sun(p) = 0._r8
-            rs_sun(p) = 0._r8
+            lmr_sun(p)    = 0._r8
+            rs_sun(p)     = 0._r8
+! MS added the code from LJE, XY & BMR-------------
+            sifsun(p) 	  =  0._r8
+            anetsun(p)	  =  0._r8         ! BMR 8/6/15
+            fyieldsun(p)  =  0._r8
+            pyieldsun(p)  =  0._r8
+            xsatsun(p)    =  0._r8
+            parsun(p)     =  0._r8
+! MS ends------------------------------------------
          end if
+
          psncan_sha = 0._r8
          psncan_wc_sha = 0._r8
          psncan_wj_sha = 0._r8
@@ -3501,18 +3935,41 @@ contains
          lmrcan_sha = 0._r8
          gscan_sha = 0._r8
          laican_sha = 0._r8
+! MS added
+         sifcan_sha    = 0._r8
+         ancan_sha     = 0._r8
+         fyieldcan_sha = 0._r8
+         pyieldcan_sha = 0._r8
+         xsatcan_sha   = 0._r8
+	 parcan_sha    = 0._r8
+! MS ends
          do iv = 1, nrad(p)
             psncan_sha = psncan_sha + psn_z_sha(p,iv) * lai_z_sha(p,iv)
             psncan_wc_sha = psncan_wc_sha + psn_wc_z_sha(p,iv) * lai_z_sha(p,iv)
             psncan_wj_sha = psncan_wj_sha + psn_wj_z_sha(p,iv) * lai_z_sha(p,iv)
             psncan_wp_sha = psncan_wp_sha + psn_wp_z_sha(p,iv) * lai_z_sha(p,iv)
+!KO         lmrcan_sha = lmrcan_sha + lmr_z_sha(p,iv) * lai_z_sha(p,iv)
+!KO
+!           lmrcan_sha = lmrcan_sha + lmr_z_sha(p,iv) * lai_z_sha(p,iv) * bsha(p)
+!KO
+!KO
             if(crop(patch%itype(p))== 0 .and. modifyphoto_and_lmr_forcrop) then
                lmrcan_sha = lmrcan_sha + lmr_z_sha(p,iv) * lai_z_sha(p,iv) * bsha(p)
             else
                lmrcan_sha = lmrcan_sha + lmr_z_sha(p,iv) * lai_z_sha(p,iv)
             endif
+!KO
             gscan_sha = gscan_sha + lai_z_sha(p,iv) / (rb(p)+rs_z_sha(p,iv))
             laican_sha = laican_sha + lai_z_sha(p,iv)
+	   
+! MS added the code from LJE, XY & BMR---------------------------
+            sifcan_sha    = sifcan_sha    + sif_z_sha(p,iv) * lai_z_sha(p,iv)
+            ancan_sha     = ancan_sha     + an_z_sha(p,iv)  * lai_z_sha(p,iv)
+            fyieldcan_sha = fyieldcan_sha + fs_z_sha(p,iv)  * lai_z_sha(p,iv)
+            pyieldcan_sha = pyieldcan_sha + ps_z_sha(p,iv)  * lai_z_sha(p,iv)
+            xsatcan_sha   = xsatcan_sha   + xsat_z_sha(p,iv)* lai_z_sha(p,iv)
+	    parcan_sha    = parcan_sha    + par_z_sha(p,iv) * lai_z_sha(p,iv)
+! MS ends--------------------------------------------------------
          end do
          if (laican_sha > 0._r8) then
             psn_sha(p) = psncan_sha / laican_sha
@@ -3521,15 +3978,31 @@ contains
             psn_wp_sha(p) = psncan_wp_sha / laican_sha
             lmr_sha(p) = lmrcan_sha / laican_sha
             rs_sha(p) = laican_sha / gscan_sha - rb(p)
+! MS added
+            sifsha(p)   = sifcan_sha    / laican_sha
+            anetsha(p)  = ancan_sha     / laican_sha
+            fyieldsha(p)= fyieldcan_sha / laican_sha
+            pyieldsha(p)= pyieldcan_sha / laican_sha
+            xsatsha(p)  = xsatcan_sha   / laican_sha
+            parsha(p)   = parcan_sha    / laican_sha
+! MS ends
          else
-            psn_sha(p) =  0._r8
+            psn_sha(p) 	  =  0._r8
             psn_wc_sha(p) =  0._r8
             psn_wj_sha(p) =  0._r8
             psn_wp_sha(p) =  0._r8
-            lmr_sha(p) = 0._r8
-            rs_sha(p) = 0._r8
+            lmr_sha(p)    =  0._r8
+            rs_sha(p)     =  0._r8
+! MS added the code from LJE, XY & BMR-------------
+	    sifsha(p) 	  =  0._r8
+            anetsha(p)	  =  0._r8         ! BMR 8/6/15
+            fyieldsha(p)  =  0._r8
+            pyieldsha(p)  =  0._r8
+            xsatsha(p)	  =  0._r8
+            parsha(p)     =  0._r8
+! MS ends------------------------------------------
          end if
-         
+ 
          if ( laican_sha+laican_sun > 0._r8 ) then
             btran(p) = bsun(p) * (laican_sun / (laican_sun + laican_sha)) + &
                        bsha(p) * (laican_sha / (laican_sun + laican_sha))         
@@ -3550,7 +4023,7 @@ contains
   subroutine hybrid_PHS(x0sun, x0sha, p, iv, c, gb_mol, bsun, bsha, jesun, jesha, &
        cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
        gs_mol_sun, gs_mol_sha, qsatl, qaf, iter1, iter2, atm2lnd_inst, photosyns_inst, &
-       canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst, waterfluxbulk_inst)
+       canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst, waterflux_inst)
     !
     !! DESCRIPTION:
     !use a hybrid solver to find the root of the ci_func equation for sunlit and shaded leaves
@@ -3592,8 +4065,8 @@ contains
     type(atm2lnd_type)     , intent(in)    :: atm2lnd_inst
     type(photosyns_type)   , intent(inout) :: photosyns_inst
     type(canopystate_type) , intent(inout) :: canopystate_inst
-    type(waterdiagnosticbulk_type)  , intent(inout) :: waterdiagnosticbulk_inst
-    type(waterfluxbulk_type)   , intent(inout) :: waterfluxbulk_inst
+    type(waterstate_type)  , intent(inout) :: waterstate_inst
+    type(waterflux_type)   , intent(inout) :: waterflux_inst
     type(soilstate_type)   , intent(inout) :: soilstate_inst
     type(temperature_type) , intent(in)    :: temperature_inst
     !
@@ -3630,7 +4103,7 @@ contains
     !------------------------------------------------------------------------------
     
     associate(                                                    &
-         qflx_tran_veg => waterfluxbulk_inst%qflx_tran_veg_patch    , & ! Input:  [real(r8) (:)   ]  vegetation transpiration (mm H2O/s) (+ = to atm)
+         qflx_tran_veg => waterflux_inst%qflx_tran_veg_patch    , & ! Input:  [real(r8) (:)   ]  vegetation transpiration (mm H2O/s) (+ = to atm)
          vegwp         => canopystate_inst%vegwp_patch            & ! Input/Output: [real(r8) (:,:) ]  vegetation water matric potential (mm)
     )
 
@@ -3640,8 +4113,6 @@ contains
     bflag = .false.
     b0sun = -1._r8
     b0sha = -1._r8
-    gs0sun = 0._r8   ! Initialize to zero as good form, not used on first itteration below because of bflag
-    gs0sha = 0._r8   ! Initialize to zero as good form, not used on first itteration below because of bflag
     bsun  = 1._r8
     bsha  = 1._r8
     iter1 = 0
@@ -3660,8 +4131,8 @@ contains
        ! this ci_func_PHS call updates bsun/bsha (except on first iter)
        call ci_func_PHS(x,x0sun, x0sha, f0sun, f0sha, p, iv, c, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha,&
             gs_mol_sun, gs_mol_sha, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
-            qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, &
-            temperature_inst, waterfluxbulk_inst)
+            qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterstate_inst, soilstate_inst, &
+            temperature_inst, waterflux_inst)
        
        ! update bsun/bsha convergence vars
        dbsun=b0sun-bsun
@@ -3673,8 +4144,8 @@ contains
        ! this ci_func_PHS call creates second point for ci interpolation
        call ci_func_PHS(x,x1sun, x1sha, f1sun, f1sha, p, iv, c, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha,&
             gs_mol_sun, gs_mol_sha, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
-            qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, &
-            temperature_inst, waterfluxbulk_inst)
+            qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterstate_inst, soilstate_inst, &
+            temperature_inst, waterflux_inst)
        
        do                !inner loop finds ci
           if ( (abs(f0sun) < eps1) .and. (abs(f0sha) < eps1) ) then
@@ -3705,8 +4176,8 @@ contains
           
           call ci_func_PHS(x,x1sun, x1sha, f1sun, f1sha, p, iv, c, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha,&
                gs_mol_sun, gs_mol_sha, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
-               qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, &
-               temperature_inst, waterfluxbulk_inst)
+               qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterstate_inst, soilstate_inst, &
+               temperature_inst, waterflux_inst)
 
           if ( (abs(dxsun) < tolsun ) .and. (abs(dxsha) <tolsha) ) then
              x0sun=x1sun
@@ -3736,7 +4207,7 @@ contains
              call brent_PHS(xsun, x0sun, x1sun, f0sun, f1sun, xsha, x0sha, x1sha, f0sha, f1sha, &
                   tolsun, p, iv, c, gb_mol, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha,&
                   rh_can, gs_mol_sun, gs_mol_sha, bsun, bsha, qsatl, qaf, atm2lnd_inst, photosyns_inst, &
-                  canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst, waterfluxbulk_inst)
+                  canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst, waterflux_inst)
              x0sun=xsun
              x0sha=xsha
              exit
@@ -3747,8 +4218,8 @@ contains
              x1sha=minxsha
              call ci_func_PHS(x,x1sun, x1sha, f1sun, f1sha, p, iv, c, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha,&
                   gs_mol_sun, gs_mol_sha, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
-                  qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, &
-                  temperature_inst, waterfluxbulk_inst)
+                  qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterstate_inst, soilstate_inst, &
+                  temperature_inst, waterflux_inst)
              exit
           endif
           
@@ -3778,7 +4249,7 @@ contains
     
     !set vegwp for the final gs_mol solution
     call getvegwp(p, c, x, gb_mol, gs_mol_sun, gs_mol_sha, qsatl, qaf, soilflux, &
-         atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst)
+         atm2lnd_inst, canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst)
     vegwp(p,:)=x
     if (soilflux<0._r8) soilflux = 0._r8
     qflx_tran_veg(p) = soilflux
@@ -3792,7 +4263,7 @@ contains
   subroutine brent_PHS(xsun, x1sun, x2sun, f1sun, f2sun, xsha, x1sha, x2sha, f1sha, f2sha, &
        tol, ip, iv, ic, gb_mol, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha,&
        rh_can, gs_mol_sun, gs_mol_sha, bsun, bsha, qsatl, qaf, atm2lnd_inst, photosyns_inst, &
-       canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst, waterfluxbulk_inst)
+       canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst, waterflux_inst)
     !------------------------------------------------------------------------------
     implicit none
     !
@@ -3827,14 +4298,12 @@ contains
     type(atm2lnd_type)     , intent(in)       :: atm2lnd_inst
     type(photosyns_type)   , intent(inout)    :: photosyns_inst
     type(canopystate_type) , intent(inout)    :: canopystate_inst
-    type(waterdiagnosticbulk_type)  , intent(inout)    :: waterdiagnosticbulk_inst
-    type(waterfluxbulk_type)   , intent(inout)    :: waterfluxbulk_inst
+    type(waterstate_type)  , intent(inout)    :: waterstate_inst
+    type(waterflux_type)   , intent(inout)    :: waterflux_inst
     type(soilstate_type)   , intent(inout)    :: soilstate_inst
     type(temperature_type) , intent(in)       :: temperature_inst
     !------------------------------------------------------------------------------
     ! !LOCAL VARIABLES:
-    real(r8)                :: gs0sun               ! sunlit leaf stomatal conductance (umol H2O/m**2/s)
-    real(r8)                :: gs0sha               ! shaded leaf stomatal conductance (umol H2O/m**2/s)
     integer                 :: phase                ! sun==1, sha==2
     integer , parameter     :: nphs = 2             ! number of phases for sun/shade
     integer , parameter     :: itmax = 20           ! maximum number of iterations
@@ -3926,12 +4395,10 @@ contains
           endif
        enddo
        
-       gs0sun = gs_mol_sun
-       gs0sha = gs_mol_sha
-       call ci_func_PHS(x,b(sun), b(sha), fb(sun), fb(sha), ip, iv, ic, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha, &
+       call ci_func_PHS(x,b(sun), b(sha), fb(sun), fb(sha), ip, iv, ic, bsun, bsha, bflag, gb_mol, gs_mol_sun, gs_mol_sha,&
             gs_mol_sun, gs_mol_sha, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
-            qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, &
-            temperature_inst, waterfluxbulk_inst)
+            qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterstate_inst, soilstate_inst, &
+            temperature_inst, waterflux_inst)
        
        if( (fb(sun) == 0._r8) .and. (fb(sha) == 0._r8) ) exit
     enddo
@@ -3947,8 +4414,8 @@ contains
   !------------------------------------------------------------------------------
   subroutine ci_func_PHS(x,cisun, cisha, fvalsun, fvalsha, p, iv, c, bsun, bsha, bflag, gb_mol, gs0sun, gs0sha,&
        gs_mol_sun, gs_mol_sha, jesun, jesha, cair, oair, lmr_z_sun, lmr_z_sha, par_z_sun, par_z_sha, rh_can, &
-       qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, &
-       temperature_inst, waterfluxbulk_inst)
+       qsatl, qaf, atm2lnd_inst, photosyns_inst, canopystate_inst, waterstate_inst, soilstate_inst, &
+       temperature_inst, waterflux_inst)
     !------------------------------------------------------------------------------
     !
     ! !DESCRIPTION:
@@ -3984,8 +4451,8 @@ contains
     type(atm2lnd_type)     , intent(in)    :: atm2lnd_inst
     type(photosyns_type)   , intent(inout) :: photosyns_inst
     type(canopystate_type) , intent(in)    :: canopystate_inst
-    type(waterdiagnosticbulk_type)  , intent(in)    :: waterdiagnosticbulk_inst
-    type(waterfluxbulk_type)   , intent(in)    :: waterfluxbulk_inst
+    type(waterstate_type)  , intent(in)    :: waterstate_inst
+    type(waterflux_type)   , intent(in)    :: waterflux_inst
     type(soilstate_type)   , intent(in)    :: soilstate_inst
     type(temperature_type) , intent(in)    :: temperature_inst
 
@@ -4034,8 +4501,8 @@ contains
     if (bflag) then   !zqz what if bsun==0 ... doesn't break... but follow up
 
        call calcstress(p,c,x,bsun,bsha,gb_mol,gs0sun,gs0sha,qsatl,qaf, &
-            atm2lnd_inst,canopystate_inst,waterdiagnosticbulk_inst,soilstate_inst, &
-            temperature_inst, waterfluxbulk_inst)
+            atm2lnd_inst,canopystate_inst,waterstate_inst,soilstate_inst, &
+            temperature_inst, waterflux_inst)
     endif
     
     if (c3flag(p)) then
@@ -4196,8 +4663,8 @@ contains
   
   !------------------------------------------------------------------------------
   subroutine calcstress(p,c,x,bsun,bsha,gb_mol,gs_mol_sun,gs_mol_sha,qsatl,qaf, &
-       atm2lnd_inst,canopystate_inst,waterdiagnosticbulk_inst,soilstate_inst, &
-       temperature_inst, waterfluxbulk_inst)
+       atm2lnd_inst,canopystate_inst,waterstate_inst,soilstate_inst, &
+       temperature_inst, waterflux_inst)
     !
     ! DESCRIPTIONS
     ! compute the transpiration stress using a plant hydraulics approach
@@ -4220,10 +4687,10 @@ contains
     real(r8)               , intent(in)  :: qaf             ! humidity of canopy air [kg/kg]
     type(atm2lnd_type)     , intent(in)  :: atm2lnd_inst
     type(canopystate_type) , intent(in)  :: canopystate_inst
-    type(waterdiagnosticbulk_type)  , intent(in)  :: waterdiagnosticbulk_inst
+    type(waterstate_type)  , intent(in)  :: waterstate_inst
     type(soilstate_type)   , intent(in)  :: soilstate_inst
     type(temperature_type) , intent(in)  :: temperature_inst
-    type(waterfluxbulk_type)   , intent(in)  :: waterfluxbulk_inst
+    type(waterflux_type)   , intent(in)  :: waterflux_inst
     !
     ! !LOCAL VARIABLES:
     real(r8) :: wtl                   ! heat conductance for leaf [m/s]
@@ -4255,12 +4722,12 @@ contains
          elai          => canopystate_inst%elai_patch           , & ! Input:  [real(r8) (:)   ]  one-sided leaf area index with burying by snow
          esai          => canopystate_inst%esai_patch           , & ! Input:  [real(r8) (:)   ]  one-sided stem area index with burying by snow
          tsai          => canopystate_inst%tsai_patch           , & ! Input:  [real(r8) (:)   ]  patch canopy one-sided stem area index, no burying by snow
-         fdry          => waterdiagnosticbulk_inst%fdry_patch            , & ! Input:  [real(r8) (:)   ]  fraction of foliage that is green and dry [-]
+         fdry          => waterstate_inst%fdry_patch            , & ! Input:  [real(r8) (:)   ]  fraction of foliage that is green and dry [-]
          forc_rho      => atm2lnd_inst%forc_rho_downscaled_col  , & ! Input:  [real(r8) (:)   ]  density (kg/m**3)
          forc_pbot     => atm2lnd_inst%forc_pbot_downscaled_col , & ! Input:  [real(r8) (:)   ]  atmospheric pressure (Pa)
          tgcm          => temperature_inst%thm_patch            , & ! Input:  [real(r8) (:)   ]  air temperature at agcm reference height (kelvin)
          bsw           => soilstate_inst%bsw_col                , & ! Input:  [real(r8) (:,:) ]  Clapp and Hornberger "b"
-         qflx_tran_veg => waterfluxbulk_inst%qflx_tran_veg_patch    , & ! Input:  [real(r8) (:)   ]  vegetation transpiration (mm H2O/s) (+ = to atm)
+         qflx_tran_veg => waterflux_inst%qflx_tran_veg_patch    , & ! Input:  [real(r8) (:)   ]  vegetation transpiration (mm H2O/s) (+ = to atm)
          sucsat        => soilstate_inst%sucsat_col               & ! Input:  [real(r8) (:,:) ]  minimum soil suction (mm)
          )
 
@@ -4279,7 +4746,7 @@ contains
     !compute transpiration demand
     havegs=.true.
     call getqflx(p,c,gb_mol,gs0sun,gs0sha,qflx_sun,qflx_sha,qsatl,qaf,havegs, &
-         atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, temperature_inst)
+         atm2lnd_inst, canopystate_inst, waterstate_inst, temperature_inst)
     
     if ((laisun(p)>tol_lai .or. laisha(p)>tol_lai).and.&
          (qflx_sun>0._r8 .or. qflx_sha>0._r8))then
@@ -4291,7 +4758,7 @@ contains
        iter=iter+1
 
        call spacF(p,c,x,f,qflx_sun,qflx_sha, &
-            atm2lnd_inst,canopystate_inst,soilstate_inst,temperature_inst,waterfluxbulk_inst)
+            atm2lnd_inst,canopystate_inst,waterstate_inst,soilstate_inst,temperature_inst,waterflux_inst)
           
        if ( sqrt(sum(f*f)) < tolf*(qflx_sun+qflx_sha) ) then  !fluxes balanced -> exit
           flag = .false.
@@ -4303,7 +4770,7 @@ contains
        end if
        
        call spacA(p,c,x,A,qflx_sun,qflx_sha,flag, &
-            atm2lnd_inst,canopystate_inst,soilstate_inst,temperature_inst,waterfluxbulk_inst)
+            atm2lnd_inst,canopystate_inst,waterstate_inst,soilstate_inst,temperature_inst,waterflux_inst)
 
        if (flag) then
           ! cannot invert the matrix, solve for x algebraically assuming no flux                            
@@ -4359,7 +4826,7 @@ contains
     if (flag) then
        ! solve algebraically
        call getvegwp(p, c, x, gb_mol, gs0sun, gs0sha, qsatl, qaf, soilflux, &
-               atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst)
+               atm2lnd_inst, canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst)
        bsun = plc(x(sun),p,c,sun,veg)
        bsha = plc(x(sha),p,c,sha,veg)
     else     
@@ -4370,7 +4837,7 @@ contains
     ! retrieve stressed stomatal conductance
     havegs=.FALSE.
     call getqflx(p,c,gb_mol,gs0sun,gs0sha,qsun,qsha,qsatl,qaf,havegs, &
-         atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, temperature_inst)
+         atm2lnd_inst, canopystate_inst, waterstate_inst, temperature_inst)
     
     ! compute water stress
     ! .. generally -> B= gs_stressed / gs_unstressed
@@ -4396,7 +4863,7 @@ contains
        gs0sun=bsun*gs_mol_sun
        gs0sha=bsha*gs_mol_sha
        call getvegwp(p, c, x, gb_mol, gs0sun, gs0sha, qsatl, qaf, soilflux, &
-            atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst)
+            atm2lnd_inst, canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst)
        if (soilflux<0._r8) soilflux = 0._r8
        qflx_tran_veg(p) = soilflux
     endif
@@ -4410,8 +4877,8 @@ contains
    
   !------------------------------------------------------------------------------
   subroutine spacA(p,c,x,invA,qflx_sun,qflx_sha,flag, &
-       atm2lnd_inst,canopystate_inst,soilstate_inst, &
-       temperature_inst, waterfluxbulk_inst)
+       atm2lnd_inst,canopystate_inst,waterstate_inst,soilstate_inst, &
+       temperature_inst, waterflux_inst)
     
     !
     ! DESCRIPTION
@@ -4438,9 +4905,10 @@ contains
     logical                , intent(out) :: flag            ! tells calling function that the matrix is not invertible
     type(atm2lnd_type)     , intent(in)  :: atm2lnd_inst
     type(canopystate_type) , intent(in)  :: canopystate_inst
+    type(waterstate_type)  , intent(in)  :: waterstate_inst
     type(soilstate_type)   , intent(in)  :: soilstate_inst
     type(temperature_type) , intent(in)  :: temperature_inst
-    type(waterfluxbulk_type)   , intent(in)  :: waterfluxbulk_inst
+    type(waterflux_type)   , intent(in)  :: waterflux_inst
     !
     ! !LOCAL VARIABLES:
     real(r8) :: wtl                   ! heat conductance for leaf [m/s]
@@ -4592,8 +5060,8 @@ contains
   
   !------------------------------------------------------------------------------
   subroutine spacF(p,c,x,f,qflx_sun,qflx_sha, &
-       atm2lnd_inst,canopystate_inst,soilstate_inst, &
-       temperature_inst, waterfluxbulk_inst)
+       atm2lnd_inst,canopystate_inst,waterstate_inst,soilstate_inst, &
+       temperature_inst, waterflux_inst)
     !
     ! DESCRIPTION
     ! Returns f, the flux divergence across each vegetation segment
@@ -4613,9 +5081,10 @@ contains
     real(r8)               , intent(in)  :: qflx_sha        ! Shaded leaf transpiration [kg/m2/s] 
     type(atm2lnd_type)     , intent(in)  :: atm2lnd_inst
     type(canopystate_type) , intent(in)  :: canopystate_inst
+    type(waterstate_type)  , intent(in)  :: waterstate_inst
     type(soilstate_type)   , intent(in)  :: soilstate_inst
     type(temperature_type) , intent(in)  :: temperature_inst
-    type(waterfluxbulk_type)   , intent(in)  :: waterfluxbulk_inst
+    type(waterflux_type)   , intent(in)  :: waterflux_inst
     !
     ! !LOCAL VARIABLES:
     real(r8) :: wtl                   ! heat conductance for leaf [m/s]
@@ -4638,7 +5107,7 @@ contains
          tsai          => canopystate_inst%tsai_patch           , & ! Input:  [real(r8) (:)   ]  patch canopy one-sided stem area index, no burying by snow
          smp           => soilstate_inst%smp_l_col              , & ! Input: [real(r8) (:,:) ]  soil matrix potential [mm]
          ivt           => patch%itype                           , & ! Input:  [integer  (:)   ]  patch vegetation type
-         qflx_tran_veg => waterfluxbulk_inst%qflx_tran_veg_patch    , & ! Input:  [real(r8) (:)   ]  vegetation transpiration (mm H2O/s) (+ = to atm)
+         qflx_tran_veg => waterflux_inst%qflx_tran_veg_patch    , & ! Input:  [real(r8) (:)   ]  vegetation transpiration (mm H2O/s) (+ = to atm)
          z             => col%z                                   & ! Input:  [real(r8) (:,:) ]  layer node depth (m)
          )
     
@@ -4674,7 +5143,7 @@ contains
   
   !--------------------------------------------------------------------------------
   subroutine getvegwp(p, c, x, gb_mol, gs_mol_sun, gs_mol_sha, qsatl, qaf, soilflux, &
-       atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, soilstate_inst, temperature_inst)
+       atm2lnd_inst, canopystate_inst, waterstate_inst, soilstate_inst, temperature_inst)
     ! !DESCRIPTION:
     !  Calculates transpiration and returns corresponding vegwp in x
     !
@@ -4696,7 +5165,7 @@ contains
     real(r8)               , intent(out) :: soilflux         ! total soil column transpiration [mm/s]
     type(atm2lnd_type)     , intent(in)  :: atm2lnd_inst
     type(canopystate_type) , intent(in)  :: canopystate_inst
-    type(waterdiagnosticbulk_type)  , intent(in)  :: waterdiagnosticbulk_inst
+    type(waterstate_type)  , intent(in)  :: waterstate_inst
     type(soilstate_type)   , intent(in)  :: soilstate_inst
     type(temperature_type) , intent(in)  :: temperature_inst
     !
@@ -4732,7 +5201,7 @@ contains
     !compute transpiration demand
     havegs=.true.
     call getqflx(p,c,gb_mol,gs_mol_sun,gs_mol_sha,qflx_sun,qflx_sha,qsatl,qaf,havegs, &
-         atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, temperature_inst)
+         atm2lnd_inst, canopystate_inst, waterstate_inst, temperature_inst)
     
     !calculate root water potential
     if ( abs(sum(k_soil_root(p,1:nlevsoi))) == 0._r8 ) then
@@ -4775,7 +5244,7 @@ contains
   
   !--------------------------------------------------------------------------------
   subroutine getqflx(p,c,gb_mol,gs_mol_sun,gs_mol_sha,qflx_sun,qflx_sha,qsatl,qaf,havegs, &
-       atm2lnd_inst, canopystate_inst, waterdiagnosticbulk_inst, temperature_inst)
+       atm2lnd_inst, canopystate_inst, waterstate_inst, temperature_inst)
     ! !DESCRIPTION:
     !  calculate sunlit and shaded transpiration using gb_MOL and gs_MOL
     ! !USES:
@@ -4796,7 +5265,7 @@ contains
     logical  , intent(in)     :: havegs     ! signals direction of calculation gs->qflx or qflx->gs
     type(atm2lnd_type)     , intent(in)  :: atm2lnd_inst
     type(canopystate_type) , intent(in)  :: canopystate_inst
-    type(waterdiagnosticbulk_type)  , intent(in)  :: waterdiagnosticbulk_inst
+    type(waterstate_type)  , intent(in)  :: waterstate_inst
     type(temperature_type) , intent(in)  :: temperature_inst
     !
     ! !LOCAL VARIABLES:
@@ -4812,7 +5281,7 @@ contains
          laisha        => canopystate_inst%laisha_patch         , & ! Input: [real(r8) (:)   ]  shaded leaf area
          elai          => canopystate_inst%elai_patch           , & ! Input: [real(r8) (:)   ]  one-sided leaf area index with burying by snow
          esai          => canopystate_inst%esai_patch           , & ! Input: [real(r8) (:)   ]  one-sided stem area index with burying by snow
-         fdry          => waterdiagnosticbulk_inst%fdry_patch            , & ! Input: [real(r8) (:)   ]  fraction of foliage that is green and dry [-]
+         fdry          => waterstate_inst%fdry_patch            , & ! Input: [real(r8) (:)   ]  fraction of foliage that is green and dry [-]
          forc_rho      => atm2lnd_inst%forc_rho_downscaled_col  , & ! Input: [real(r8) (:)   ]  density (kg/m**3)
          forc_pbot     => atm2lnd_inst%forc_pbot_downscaled_col , & ! Input: [real(r8) (:)   ]  atmospheric pressure (Pa)
          tgcm          => temperature_inst%thm_patch              & ! Input: [real(r8) (:)   ]  air temperature at agcm reference height (kelvin)
